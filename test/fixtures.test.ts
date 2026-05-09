@@ -23,7 +23,63 @@ interface FixtureSpec {
   facets: FacetSpec[];
 }
 
+let nextAstId = 1000;
 function buildArtifact(spec: FacetSpec): unknown {
+  const declNodes = spec.decls.map((d, i) => {
+    const id = nextAstId++;
+    return {
+      id,
+      nodeType: "VariableDeclaration",
+      name: d.name,
+      constant: true,
+      src: `${100 + i * 50}:50:0`,
+      typeName: { nodeType: "ElementaryTypeName", name: "bytes32" },
+      value: {
+        nodeType: "FunctionCall",
+        expression: { nodeType: "Identifier", name: "keccak256" },
+        arguments: [{ nodeType: "Literal", kind: "string", value: d.namespace }],
+      },
+    };
+  });
+  // Each constant is consumed by an inline-assembly slot assignment, so it is
+  // confirmed as a Diamond Storage slot pointer (not a generic bytes32 id).
+  const assemblyNodes = declNodes.map((d, i) => {
+    const valueSrc = `${5000 + i}:5:0`;
+    return {
+      nodeType: "FunctionDefinition",
+      name: `layout_${d.name}`,
+      body: {
+        nodeType: "Block",
+        statements: [
+          {
+            nodeType: "InlineAssembly",
+            src: "0:0:0",
+            AST: {
+              nodeType: "YulBlock",
+              statements: [
+                {
+                  nodeType: "YulAssignment",
+                  variableNames: [
+                    { nodeType: "YulIdentifier", name: "l.slot", src: "0:0:0" },
+                  ],
+                  value: { nodeType: "YulIdentifier", name: "p", src: valueSrc },
+                },
+              ],
+            },
+            externalReferences: [
+              {
+                declaration: d.id,
+                isSlot: false,
+                isOffset: false,
+                src: valueSrc,
+                valueSize: 1,
+              },
+            ],
+          },
+        ],
+      },
+    };
+  });
   return {
     ast: {
       nodeType: "SourceUnit",
@@ -32,18 +88,7 @@ function buildArtifact(spec: FacetSpec): unknown {
           nodeType: "ContractDefinition",
           name: spec.contract,
           contractKind: "library",
-          nodes: spec.decls.map((d, i) => ({
-            nodeType: "VariableDeclaration",
-            name: d.name,
-            constant: true,
-            src: `${100 + i * 50}:50:0`,
-            typeName: { nodeType: "ElementaryTypeName", name: "bytes32" },
-            value: {
-              nodeType: "FunctionCall",
-              expression: { nodeType: "Identifier", name: "keccak256" },
-              arguments: [{ nodeType: "Literal", kind: "string", value: d.namespace }],
-            },
-          })),
+          nodes: [...declNodes, ...assemblyNodes],
         },
       ],
     },

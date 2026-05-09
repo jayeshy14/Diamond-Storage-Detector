@@ -1,5 +1,5 @@
 import { keccak_256 } from "@noble/hashes/sha3";
-import type { Analyzer, AnalyzerContext, Finding, SourceLocation } from "../types.js";
+import type { Analyzer, AnalyzerContext, FacetArtifact, Finding, SourceLocation } from "../types.js";
 
 interface AstNode {
   nodeType?: string;
@@ -7,6 +7,7 @@ interface AstNode {
 }
 
 interface SlotConstant {
+  declarationId: number;
   variableName: string;
   namespace: string;
   slot: string;
@@ -91,6 +92,7 @@ export function collectSlotConstants(ctx: AnalyzerContext): SlotConstant[] {
       if (!isBytes32Constant(node)) return;
       const namespace = extractKeccakStringArg(node.value);
       if (namespace === null) return;
+      const declarationId = typeof node.id === "number" ? node.id : -1;
       const variableName = (node.name as string) ?? "<anon>";
       const contract = declaringContract(parents) ?? artifact.contractName;
       const src = node.src as string | undefined;
@@ -98,6 +100,7 @@ export function collectSlotConstants(ctx: AnalyzerContext): SlotConstant[] {
       if (seen.has(dedupeKey)) return;
       seen.add(dedupeKey);
       out.push({
+        declarationId,
         variableName,
         namespace,
         slot: keccak256Hex(namespace),
@@ -110,12 +113,134 @@ export function collectSlotConstants(ctx: AnalyzerContext): SlotConstant[] {
   return out;
 }
 
+interface ExternalReference {
+  declaration?: number;
+  isSlot?: boolean;
+  isOffset?: boolean;
+  suffix?: string;
+  src?: string;
+}
+
+/**
+ * Walk a Yul block. For every `YulAssignment` whose target is `<x>.slot`, collect
+ * the `src` of the value-side YulIdentifier — that's what we'll match back against
+ * the InlineAssembly's externalReferences to find the Solidity declaration.
+ */
+function collectSlotAssignmentValueSrcs(yulNode: unknown, srcs: Set<string>): void {
+  if (!yulNode || typeof yulNode !== "object") return;
+  const node = yulNode as AstNode;
+  if (node.nodeType === "YulAssignment") {
+    const targets = node.variableNames as AstNode[] | undefined;
+    const targetsSlot =
+      Array.isArray(targets) &&
+      targets.some((t) => typeof t.name === "string" && t.name.endsWith(".slot"));
+    if (targetsSlot) {
+      const value = node.value as AstNode | undefined;
+      if (value?.nodeType === "YulIdentifier" && typeof value.src === "string") {
+        srcs.add(value.src);
+      }
+    }
+  }
+  for (const key of Object.keys(node)) {
+    const v = node[key];
+    if (Array.isArray(v)) {
+      for (const child of v) collectSlotAssignmentValueSrcs(child, srcs);
+    } else if (v && typeof v === "object") {
+      collectSlotAssignmentValueSrcs(v, srcs);
+    }
+  }
+}
+
+/**
+ * Collect Solidity AST declaration ids that flow into a `.slot` assignment in any
+ * inline-assembly block. The matching is: Yul `<x>.slot := V` → V's src → the
+ * InlineAssembly's externalReferences entry with the same src → declaration id.
+ */
+function collectSlotUsedDeclarationIds(artifacts: FacetArtifact[]): Set<number> {
+  const ids = new Set<number>();
+  for (const artifact of artifacts) {
+    if (!artifact.ast) continue;
+    walkAst(artifact.ast, (node) => {
+      if (node.nodeType !== "InlineAssembly") return;
+      const yulAst = node.AST;
+      if (!yulAst) return;
+      const slotValueSrcs = new Set<string>();
+      collectSlotAssignmentValueSrcs(yulAst, slotValueSrcs);
+      if (slotValueSrcs.size === 0) return;
+      const refs = node.externalReferences as ExternalReference[] | undefined;
+      if (!Array.isArray(refs)) return;
+      for (const ref of refs) {
+        if (
+          typeof ref.src === "string" &&
+          slotValueSrcs.has(ref.src) &&
+          typeof ref.declaration === "number"
+        ) {
+          ids.add(ref.declaration);
+        }
+      }
+    });
+  }
+  return ids;
+}
+
+/**
+ * Collect one-hop aliases. For:
+ *   bytes32 slot = POSITION;
+ *   assembly { l.slot := slot }
+ * solc's externalReferences will say `slot` is used as `.slot`, where `slot` is the
+ * local's id, not the constant's id. We need to map the local back to the constant.
+ *
+ * Returns map: alias declaration id -> referenced declaration id.
+ */
+function collectAliases(artifacts: FacetArtifact[]): Map<number, number> {
+  const aliases = new Map<number, number>();
+  for (const artifact of artifacts) {
+    if (!artifact.ast) continue;
+    walkAst(artifact.ast, (node) => {
+      if (node.nodeType !== "VariableDeclarationStatement") return;
+      const initialValue = node.initialValue as AstNode | undefined;
+      if (initialValue?.nodeType !== "Identifier") return;
+      const referenced = initialValue.referencedDeclaration as number | undefined;
+      if (typeof referenced !== "number") return;
+      const decls = node.declarations as AstNode[] | undefined;
+      if (!Array.isArray(decls)) return;
+      for (const d of decls) {
+        if (typeof d?.id === "number") aliases.set(d.id, referenced);
+      }
+    });
+  }
+  return aliases;
+}
+
+function isUsedAsSlot(
+  constantId: number,
+  slotUsedIds: Set<number>,
+  aliases: Map<number, number>,
+): boolean {
+  if (constantId < 0) return false;
+  if (slotUsedIds.has(constantId)) return true;
+  for (const [aliasId, refId] of aliases) {
+    if (refId === constantId && slotUsedIds.has(aliasId)) return true;
+  }
+  return false;
+}
+
 export const diamondStorageAnalyzer: Analyzer = {
   name: "diamond-storage-namespace",
   run(ctx) {
     const constants = collectSlotConstants(ctx);
+    const slotUsedIds = collectSlotUsedDeclarationIds(ctx.artifacts);
+    const aliases = collectAliases(ctx.artifacts);
+
+    // Only flag constants we can confirm are used as Diamond Storage slot pointers.
+    // Module ids, role ids, event topics, etc. share the syntactic shape but aren't
+    // collisions even when two contracts agree on the same string.
+    const slotConstants = constants.filter((c) =>
+      isUsedAsSlot(c.declarationId, slotUsedIds, aliases),
+    );
+
     const bySlot = new Map<string, SlotConstant[]>();
-    for (const c of constants) {
+    for (const c of slotConstants) {
       const list = bySlot.get(c.slot) ?? [];
       list.push(c);
       bySlot.set(c.slot, list);
