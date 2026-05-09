@@ -1,0 +1,34 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderMarkdown > groups findings by kind with severity-tagged collapsible sections 1`] = `
+"### diamond-detect
+
+Scanned **7** contract(s). Found **1** error(s), **1** warning(s), **1** info(s).
+
+<details open><summary>🔴 error — Diamond Storage namespace collisions (1)</summary>
+
+- **\`0x1111\`** — 🔴 error
+  - ns.shared collides
+  - facets: \`LibA\`, \`LibB\`
+  - sources: \`src/LibA.sol\`, \`src/LibB.sol\`
+
+</details>
+
+<details><summary>🟡 warn — Inheritance / cross-contract slot overlap (1)</summary>
+
+- **\`0x0000\`** — 🟡 warn
+  - slot 0 overlap
+  - facets: \`FacetX\`, \`FacetY\`
+  - sources: \`src/X.sol\`, \`src/Y.sol\`
+
+</details>
+
+<details><summary>🔵 info — Inline-assembly hardcoded sstore slots (1)</summary>
+
+- **\`0xdead\`** — 🔵 info
+  - sstore literal
+  - facets: \`LibZ\`
+  - sources: \`src/LibZ.sol\`
+
+</details>"
+`;
