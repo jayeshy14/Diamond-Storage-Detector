@@ -5,3 +5,7 @@ coverage
 .DS_Store
 .vscode
 .idea
+
+# foundry artifacts in example projects
+examples/**/out
+examples/**/cache
