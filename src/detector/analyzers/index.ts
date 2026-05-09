@@ -1,7 +1,12 @@
 import type { Analyzer } from "../types.js";
 import { diamondStorageAnalyzer } from "./diamondStorage.js";
 import { erc7201Analyzer } from "./erc7201.js";
+import { appStorageAnalyzer } from "./appStorage.js";
 
-export const defaultAnalyzers: Analyzer[] = [diamondStorageAnalyzer, erc7201Analyzer];
+export const defaultAnalyzers: Analyzer[] = [
+  diamondStorageAnalyzer,
+  erc7201Analyzer,
+  appStorageAnalyzer,
+];
 
-export { diamondStorageAnalyzer, erc7201Analyzer };
+export { diamondStorageAnalyzer, erc7201Analyzer, appStorageAnalyzer };
