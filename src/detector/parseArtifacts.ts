@@ -99,7 +99,7 @@ export async function loadFoundryArtifacts(
   const { outDir } = await resolveFoundryRoot(inputPath);
   if (!(await fileExists(outDir))) {
     throw new Error(
-      `Foundry out/ directory not found at ${outDir}. Run \`forge build --extra-output storageLayout\` first.`,
+      `Foundry out/ directory not found at ${outDir}. Run \`forge build\` first, with \`ast = true\` and \`extra_output = ["storageLayout"]\` in foundry.toml (or pass \`--ast\` to forge).`,
     );
   }
 

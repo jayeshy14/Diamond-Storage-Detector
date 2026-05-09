@@ -27,7 +27,7 @@
     "node": ">=20"
   },
   "bin": {
-    "diamond-detect": "./dist/cli.js"
+    "diamond-detect": "dist/cli.js"
   },
   "files": [
     "dist",

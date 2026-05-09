@@ -33,7 +33,7 @@ async function run(target: string, opts: CliOptions): Promise<void> {
   if (result.artifacts.length > 0 && withAst === 0 && !opts.json) {
     process.stderr.write(
       pc.yellow(
-        "warning: no AST found in any artifact. Re-run `forge build --ast` so AST-based analyzers can detect collisions.\n",
+        "warning: no AST found in any artifact. Set `ast = true` in foundry.toml (or pass `--ast` to forge) and rebuild — AST-based analyzers depend on it.\n",
       ),
     );
   }
