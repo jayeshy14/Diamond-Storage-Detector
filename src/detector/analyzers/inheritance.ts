@@ -43,7 +43,10 @@ export const inheritanceAnalyzer: Analyzer = {
   name: "inheritance-overlap",
   run(ctx) {
     const findings: Finding[] = [];
-    const grouped = collectSlotEntries(ctx.artifacts);
+    const scoped = ctx.isFacet
+      ? ctx.artifacts.filter(ctx.isFacet)
+      : ctx.artifacts;
+    const grouped = collectSlotEntries(scoped);
 
     for (const [_slotKey, entries] of grouped) {
       const facetNames = new Set(entries.map((e) => e.artifact.contractName));

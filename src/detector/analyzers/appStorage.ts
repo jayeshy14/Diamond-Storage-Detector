@@ -87,7 +87,10 @@ export const appStorageAnalyzer: Analyzer = {
   name: "appstorage-fingerprint",
   run(ctx) {
     const findings: Finding[] = [];
-    const grouped = collectStructFingerprints(ctx.artifacts);
+    const scoped = ctx.isFacet
+      ? ctx.artifacts.filter(ctx.isFacet)
+      : ctx.artifacts;
+    const grouped = collectStructFingerprints(scoped);
 
     for (const [label, items] of grouped) {
       const variants = new Map<string, FingerprintedStruct[]>();

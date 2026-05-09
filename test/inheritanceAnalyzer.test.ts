@@ -123,4 +123,22 @@ describe("inheritanceAnalyzer", () => {
     );
     expect(findings).toEqual([]);
   });
+
+  it("respects ctx.isFacet — non-facet contracts are excluded from the comparison", () => {
+    const facetA = facet("FacetA", "src/facets/FacetA.sol", [
+      slot("lib/oz/Ownable.sol:Ownable", "_owner", "t_address", "0", 0),
+    ]);
+    const standalone = facet("Registry", "src/registry/Registry.sol", [
+      slot("src/registry/Registry.sol:Registry", "isReg", "t_bool", "0", 0),
+    ]);
+    const allFindings = inheritanceAnalyzer.run(ctx([facetA, standalone]));
+    expect(allFindings).toHaveLength(1);
+
+    const scopedFindings = inheritanceAnalyzer.run({
+      artifacts: [facetA, standalone],
+      rawSources: new Map(),
+      isFacet: (a) => a.sourcePath.startsWith("src/facets/"),
+    });
+    expect(scopedFindings).toEqual([]);
+  });
 });

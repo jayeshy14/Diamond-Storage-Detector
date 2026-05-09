@@ -5,6 +5,7 @@ export interface DetectOptions {
   path: string;
   ignoreGlobs?: string[];
   noDefaultIgnore?: boolean;
+  facetGlobs?: string[];
 }
 
 export interface DetectionResult {
@@ -45,6 +46,14 @@ function buildIgnore(
   return (sourcePath: string) => patterns.some((p) => p.test(sourcePath));
 }
 
+function buildIsFacet(
+  globs: string[] | undefined,
+): ((artifact: FacetArtifact) => boolean) | undefined {
+  if (!globs || globs.length === 0) return undefined;
+  const patterns = compilePatterns(globs);
+  return (artifact) => patterns.some((p) => p.test(artifact.sourcePath));
+}
+
 export async function detect(
   options: DetectOptions,
   analyzers: Analyzer[],
@@ -56,6 +65,7 @@ export async function detect(
   const ctx: AnalyzerContext = {
     artifacts,
     rawSources: new Map(),
+    isFacet: buildIsFacet(options.facetGlobs),
   };
 
   const findings: Finding[] = [];

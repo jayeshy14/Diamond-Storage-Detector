@@ -61,6 +61,7 @@ export interface FacetArtifact {
 export interface AnalyzerContext {
   artifacts: FacetArtifact[];
   rawSources: Map<string, string>;
+  isFacet?: (artifact: FacetArtifact) => boolean;
 }
 
 export interface Analyzer {

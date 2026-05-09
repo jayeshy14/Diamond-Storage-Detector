@@ -15,6 +15,7 @@ interface CliOptions {
   severity: Severity;
   ignore: string[];
   noDefaultIgnore?: boolean;
+  facets: string[];
 }
 
 async function run(target: string, opts: CliOptions): Promise<void> {
@@ -23,6 +24,7 @@ async function run(target: string, opts: CliOptions): Promise<void> {
       path: target,
       ignoreGlobs: opts.ignore,
       noDefaultIgnore: opts.noDefaultIgnore,
+      facetGlobs: opts.facets.length > 0 ? opts.facets : undefined,
     },
     defaultAnalyzers,
   );
@@ -69,14 +71,20 @@ program
     "warn" as Severity,
   )
   .option(
-    "--ignore <glob...>",
-    "Skip source files matching these globs (in addition to defaults: lib/**, test/**, script/**, **/*.t.sol, **/*.s.sol)",
+    "--ignore <glob>",
+    "Skip source files matching this glob. Repeat for multiple. Defaults: lib/**, test/**, script/**, **/*.t.sol, **/*.s.sol",
     (v: string, prev: string[] = []) => prev.concat(v),
     [] as string[],
   )
   .option(
     "--no-default-ignore",
     "Disable the built-in lib/test/script ignore list and scan everything in out/",
+  )
+  .option(
+    "--facets <glob>",
+    "Restrict facet-shared-storage analyzers (inheritance-overlap, appstorage-fingerprint) to source paths matching this glob. Repeat for multiple.",
+    (v: string, prev: string[] = []) => prev.concat(v),
+    [] as string[],
   )
   .action(async (target: string, opts: CliOptions) => {
     try {
