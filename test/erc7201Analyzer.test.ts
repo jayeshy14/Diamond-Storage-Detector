@@ -49,11 +49,11 @@ function ctx(artifacts: FacetArtifact[]): AnalyzerContext {
 describe("collectErc7201Annotations", () => {
   it("extracts a namespace id from a struct's NatSpec", () => {
     const annotations = collectErc7201Annotations([
-      structWithAnnotation("LibA", "src/LibA.sol", "blok.access"),
+      structWithAnnotation("LibA", "src/LibA.sol", "myapp.access"),
     ]);
     expect(annotations).toHaveLength(1);
-    expect(annotations[0]!.namespaceId).toBe("blok.access");
-    expect(annotations[0]!.slot).toBe(erc7201Slot("blok.access"));
+    expect(annotations[0]!.namespaceId).toBe("myapp.access");
+    expect(annotations[0]!.slot).toBe(erc7201Slot("myapp.access"));
     expect(annotations[0]!.contract).toBe("LibA");
   });
 
@@ -120,8 +120,8 @@ describe("erc7201Analyzer", () => {
   it("emits no findings when each namespace is unique", () => {
     const findings = erc7201Analyzer.run(
       ctx([
-        structWithAnnotation("LibA", "src/LibA.sol", "blok.a"),
-        structWithAnnotation("LibB", "src/LibB.sol", "blok.b"),
+        structWithAnnotation("LibA", "src/LibA.sol", "myapp.a"),
+        structWithAnnotation("LibB", "src/LibB.sol", "myapp.b"),
       ]),
     );
     expect(findings).toEqual([]);
@@ -130,13 +130,13 @@ describe("erc7201Analyzer", () => {
   it("flags two sources declaring the same erc7201 id", () => {
     const findings = erc7201Analyzer.run(
       ctx([
-        structWithAnnotation("LibA", "src/LibA.sol", "blok.shared"),
-        structWithAnnotation("LibB", "src/LibB.sol", "blok.shared"),
+        structWithAnnotation("LibA", "src/LibA.sol", "myapp.shared"),
+        structWithAnnotation("LibB", "src/LibB.sol", "myapp.shared"),
       ]),
     );
     expect(findings).toHaveLength(1);
     expect(findings[0]!.kind).toBe("erc7201-namespace");
-    expect(findings[0]!.slot).toBe(erc7201Slot("blok.shared"));
+    expect(findings[0]!.slot).toBe(erc7201Slot("myapp.shared"));
     expect(findings[0]!.facets.sort()).toEqual(["LibA", "LibB"]);
   });
 

@@ -13,8 +13,8 @@ diamond-detect .
 Expected output:
 
 ```
-🔴 ERROR diamond-storage-namespace  0x99c36ecfaabf6a966b794701a986dcc2d9e35685c5442339f000114af125cb31
-  Diamond Storage namespace "blok.strategies" is declared in 2 different sources, all resolving to the same slot.
+🔴 ERROR diamond-storage-namespace  0x84d86c34a05b71953e57fe7dafea685384b33934d9ddaebd0cf7709e74b71bab
+  Diamond Storage namespace "myapp.strategies" is declared in 2 different sources, all resolving to the same slot.
   facets: LibStrategies, LibVaults
 ```
 
@@ -34,9 +34,9 @@ Expected output:
 
 ## What changed
 
-`after/src/LibVaults.sol` declares its namespace as `"blok.vaults"` instead of `"blok.strategies"`. The keccak hashes are now distinct, so each library occupies its own slot.
+`after/src/LibVaults.sol` declares its namespace as `"myapp.vaults"` instead of `"myapp.strategies"`. The keccak hashes are now distinct, so each library occupies its own slot.
 
 ```diff
--    bytes32 internal constant POSITION = keccak256("blok.strategies");
-+    bytes32 internal constant POSITION = keccak256("blok.vaults");
+-    bytes32 internal constant POSITION = keccak256("myapp.strategies");
++    bytes32 internal constant POSITION = keccak256("myapp.vaults");
 ```

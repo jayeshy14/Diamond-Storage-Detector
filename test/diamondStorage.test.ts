@@ -53,15 +53,15 @@ describe("collectSlotConstants", () => {
     const got = collectSlotConstants(
       ctx([
         libraryArtifact("LibA", "src/LibA.sol", [
-          variableDeclaration("POSITION", "blok.strategies"),
+          variableDeclaration("POSITION", "myapp.strategies"),
         ]),
       ]),
     );
     expect(got).toHaveLength(1);
-    expect(got[0]!.namespace).toBe("blok.strategies");
+    expect(got[0]!.namespace).toBe("myapp.strategies");
     expect(got[0]!.contract).toBe("LibA");
     expect(got[0]!.slot).toBe(
-      "0x99c36ecfaabf6a966b794701a986dcc2d9e35685c5442339f000114af125cb31",
+      "0x84d86c34a05b71953e57fe7dafea685384b33934d9ddaebd0cf7709e74b71bab",
     );
   });
 
@@ -105,10 +105,10 @@ describe("diamondStorageAnalyzer", () => {
     const findings = diamondStorageAnalyzer.run(
       ctx([
         libraryArtifact("LibA", "src/LibA.sol", [
-          variableDeclaration("POSITION", "blok.strategies"),
+          variableDeclaration("POSITION", "myapp.strategies"),
         ]),
         libraryArtifact("LibB", "src/LibB.sol", [
-          variableDeclaration("POSITION", "blok.vaults"),
+          variableDeclaration("POSITION", "myapp.vaults"),
         ]),
       ]),
     );
@@ -119,10 +119,10 @@ describe("diamondStorageAnalyzer", () => {
     const findings = diamondStorageAnalyzer.run(
       ctx([
         libraryArtifact("LibStrategies", "src/LibStrategies.sol", [
-          variableDeclaration("POSITION", "blok.strategies"),
+          variableDeclaration("POSITION", "myapp.strategies"),
         ]),
         libraryArtifact("LibVaults", "src/LibVaults.sol", [
-          variableDeclaration("POSITION", "blok.strategies"),
+          variableDeclaration("POSITION", "myapp.strategies"),
         ]),
       ]),
     );
@@ -132,7 +132,7 @@ describe("diamondStorageAnalyzer", () => {
     expect(f.severity).toBe("error");
     expect(f.facets.sort()).toEqual(["LibStrategies", "LibVaults"]);
     expect(f.slot).toBe(
-      "0x99c36ecfaabf6a966b794701a986dcc2d9e35685c5442339f000114af125cb31",
+      "0x84d86c34a05b71953e57fe7dafea685384b33934d9ddaebd0cf7709e74b71bab",
     );
   });
 

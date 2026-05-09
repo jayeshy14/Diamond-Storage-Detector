@@ -88,29 +88,29 @@ const FIXTURES: FixtureSpec[] = [
       {
         contract: "LibA",
         sourcePath: "src/LibA.sol",
-        decls: [{ name: "POSITION", namespace: "blok.a" }],
+        decls: [{ name: "POSITION", namespace: "myapp.a" }],
       },
       {
         contract: "LibB",
         sourcePath: "src/LibB.sol",
-        decls: [{ name: "POSITION", namespace: "blok.b" }],
+        decls: [{ name: "POSITION", namespace: "myapp.b" }],
       },
     ],
   },
   {
     name: "02-two-way-collision",
     description:
-      "LibStrategies and LibVaults both declare keccak256(\"blok.strategies\")",
+      "LibStrategies and LibVaults both declare keccak256(\"myapp.strategies\")",
     facets: [
       {
         contract: "LibStrategies",
         sourcePath: "src/LibStrategies.sol",
-        decls: [{ name: "POSITION", namespace: "blok.strategies" }],
+        decls: [{ name: "POSITION", namespace: "myapp.strategies" }],
       },
       {
         contract: "LibVaults",
         sourcePath: "src/LibVaults.sol",
-        decls: [{ name: "POSITION", namespace: "blok.strategies" }],
+        decls: [{ name: "POSITION", namespace: "myapp.strategies" }],
       },
     ],
   },
@@ -143,39 +143,39 @@ const FIXTURES: FixtureSpec[] = [
       {
         contract: "LibFoo",
         sourcePath: "src/LibFoo.sol",
-        decls: [{ name: "POSITION", namespace: "blok.foo" }],
+        decls: [{ name: "POSITION", namespace: "myapp.foo" }],
       },
       {
         contract: "LibFooBar",
         sourcePath: "src/LibFooBar.sol",
-        decls: [{ name: "POSITION", namespace: "blok.foobar" }],
+        decls: [{ name: "POSITION", namespace: "myapp.foobar" }],
       },
     ],
   },
   {
     name: "05-mixed-clean-and-collision",
     description:
-      "four facets — two collide on \"blok.market\", two are clean. Only one finding expected.",
+      "four facets — two collide on \"myapp.market\", two are clean. Only one finding expected.",
     facets: [
       {
         contract: "LibMarket",
         sourcePath: "src/LibMarket.sol",
-        decls: [{ name: "POSITION", namespace: "blok.market" }],
+        decls: [{ name: "POSITION", namespace: "myapp.market" }],
       },
       {
         contract: "LibOrders",
         sourcePath: "src/LibOrders.sol",
-        decls: [{ name: "POSITION", namespace: "blok.market" }],
+        decls: [{ name: "POSITION", namespace: "myapp.market" }],
       },
       {
         contract: "LibTokens",
         sourcePath: "src/LibTokens.sol",
-        decls: [{ name: "POSITION", namespace: "blok.tokens" }],
+        decls: [{ name: "POSITION", namespace: "myapp.tokens" }],
       },
       {
         contract: "LibFees",
         sourcePath: "src/LibFees.sol",
-        decls: [{ name: "POSITION", namespace: "blok.fees" }],
+        decls: [{ name: "POSITION", namespace: "myapp.fees" }],
       },
     ],
   },

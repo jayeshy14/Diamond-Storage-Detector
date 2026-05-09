@@ -2,7 +2,7 @@
 
 exports[`namespace-duplicate fixtures > 01-clean-baseline: two facets with distinct namespaces — must produce no findings 1`] = `[]`;
 
-exports[`namespace-duplicate fixtures > 02-two-way-collision: LibStrategies and LibVaults both declare keccak256("blok.strategies") 1`] = `
+exports[`namespace-duplicate fixtures > 02-two-way-collision: LibStrategies and LibVaults both declare keccak256("myapp.strategies") 1`] = `
 [
   {
     "facets": [
@@ -10,12 +10,12 @@ exports[`namespace-duplicate fixtures > 02-two-way-collision: LibStrategies and 
       "LibVaults",
     ],
     "kind": "diamond-storage-namespace",
-    "message": "Diamond Storage namespace "blok.strategies" is declared in 2 different sources, all resolving to the same slot.",
+    "message": "Diamond Storage namespace "myapp.strategies" is declared in 2 different sources, all resolving to the same slot.",
     "namespaces": [
-      "blok.strategies",
+      "myapp.strategies",
     ],
     "severity": "error",
-    "slot": "0x99c36ecfaabf6a966b794701a986dcc2d9e35685c5442339f000114af125cb31",
+    "slot": "0x84d86c34a05b71953e57fe7dafea685384b33934d9ddaebd0cf7709e74b71bab",
   },
 ]
 `;
@@ -41,7 +41,7 @@ exports[`namespace-duplicate fixtures > 03-three-way-collision: three libraries 
 
 exports[`namespace-duplicate fixtures > 04-shared-prefix-distinct: namespaces share a prefix but resolve to different slots — must not be flagged 1`] = `[]`;
 
-exports[`namespace-duplicate fixtures > 05-mixed-clean-and-collision: four facets — two collide on "blok.market", two are clean. Only one finding expected. 1`] = `
+exports[`namespace-duplicate fixtures > 05-mixed-clean-and-collision: four facets — two collide on "myapp.market", two are clean. Only one finding expected. 1`] = `
 [
   {
     "facets": [
@@ -49,12 +49,12 @@ exports[`namespace-duplicate fixtures > 05-mixed-clean-and-collision: four facet
       "LibOrders",
     ],
     "kind": "diamond-storage-namespace",
-    "message": "Diamond Storage namespace "blok.market" is declared in 2 different sources, all resolving to the same slot.",
+    "message": "Diamond Storage namespace "myapp.market" is declared in 2 different sources, all resolving to the same slot.",
     "namespaces": [
-      "blok.market",
+      "myapp.market",
     ],
     "severity": "error",
-    "slot": "0x6c3a59f777f78b93f1c9a107fbf81b3723a46f802a54a3a543596bd0d2bd64b4",
+    "slot": "0xb7628c7d936adf786a49041995a8892f2cd9ef93b59ce4133a5cf0d4eae976b6",
   },
 ]
 `;

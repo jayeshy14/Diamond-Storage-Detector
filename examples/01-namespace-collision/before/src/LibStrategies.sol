@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 library LibStrategies {
-    bytes32 internal constant POSITION = keccak256("blok.strategies");
+    bytes32 internal constant POSITION = keccak256("myapp.strategies");
 
     struct Layout {
         uint256 totalAssets;

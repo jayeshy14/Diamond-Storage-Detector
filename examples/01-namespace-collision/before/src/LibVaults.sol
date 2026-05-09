@@ -4,7 +4,8 @@ pragma solidity ^0.8.20;
 library LibVaults {
     // BUG: copy-pasted namespace from LibStrategies — keccak256 hashes match,
     // so writes to LibVaults.layout() corrupt LibStrategies.layout().
-    bytes32 internal constant POSITION = keccak256("blok.strategies");
+    // The "after/" version of this file uses keccak256("myapp.vaults").
+    bytes32 internal constant POSITION = keccak256("myapp.strategies");
 
     struct Layout {
         address vault;
