@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import pc from "picocolors";
 import { detect } from "./detector/index.js";
+import { defaultAnalyzers } from "./detector/analyzers/index.js";
 import { renderTerminal } from "./reporter/terminal.js";
 import { renderJson } from "./reporter/json.js";
 import { renderMarkdown } from "./reporter/markdown.js";
@@ -18,8 +19,17 @@ interface CliOptions {
 async function run(target: string, opts: CliOptions): Promise<void> {
   const result = await detect(
     { path: target, ignoreGlobs: opts.ignore },
-    [], // analyzers wired in subsequent days
+    defaultAnalyzers,
   );
+
+  const withAst = result.artifacts.filter((a) => a.ast).length;
+  if (result.artifacts.length > 0 && withAst === 0 && !opts.json) {
+    process.stderr.write(
+      pc.yellow(
+        "warning: no AST found in any artifact. Re-run `forge build --ast` so AST-based analyzers can detect collisions.\n",
+      ),
+    );
+  }
 
   const output = opts.json
     ? renderJson(result.findings, result.artifacts.length)
