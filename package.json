@@ -1,6 +1,6 @@
 {
   "name": "diamond-detect",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Static analyzer for EIP-2535 Diamond storage-slot collisions across facets",
   "homepage": "https://github.com/jayeshy14/Diamond-Storage-Detector#readme",
   "repository": {
