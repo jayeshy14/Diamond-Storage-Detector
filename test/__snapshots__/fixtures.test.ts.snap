@@ -1,0 +1,60 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`namespace-duplicate fixtures > 01-clean-baseline: two facets with distinct namespaces — must produce no findings 1`] = `[]`;
+
+exports[`namespace-duplicate fixtures > 02-two-way-collision: LibStrategies and LibVaults both declare keccak256("blok.strategies") 1`] = `
+[
+  {
+    "facets": [
+      "LibStrategies",
+      "LibVaults",
+    ],
+    "kind": "diamond-storage-namespace",
+    "message": "Diamond Storage namespace "blok.strategies" is declared in 2 different sources, all resolving to the same slot.",
+    "namespaces": [
+      "blok.strategies",
+    ],
+    "severity": "error",
+    "slot": "0x99c36ecfaabf6a966b794701a986dcc2d9e35685c5442339f000114af125cb31",
+  },
+]
+`;
+
+exports[`namespace-duplicate fixtures > 03-three-way-collision: three libraries all reach the same slot 1`] = `
+[
+  {
+    "facets": [
+      "LibA",
+      "LibB",
+      "LibC",
+    ],
+    "kind": "diamond-storage-namespace",
+    "message": "Diamond Storage namespace "ns.shared" is declared in 3 different sources, all resolving to the same slot.",
+    "namespaces": [
+      "ns.shared",
+    ],
+    "severity": "error",
+    "slot": "0xd13bd5e90be137755440c3e99160d27f74c31f3bafaec9e96fc13a9e4dedcb0e",
+  },
+]
+`;
+
+exports[`namespace-duplicate fixtures > 04-shared-prefix-distinct: namespaces share a prefix but resolve to different slots — must not be flagged 1`] = `[]`;
+
+exports[`namespace-duplicate fixtures > 05-mixed-clean-and-collision: four facets — two collide on "blok.market", two are clean. Only one finding expected. 1`] = `
+[
+  {
+    "facets": [
+      "LibMarket",
+      "LibOrders",
+    ],
+    "kind": "diamond-storage-namespace",
+    "message": "Diamond Storage namespace "blok.market" is declared in 2 different sources, all resolving to the same slot.",
+    "namespaces": [
+      "blok.market",
+    ],
+    "severity": "error",
+    "slot": "0x6c3a59f777f78b93f1c9a107fbf81b3723a46f802a54a3a543596bd0d2bd64b4",
+  },
+]
+`;
