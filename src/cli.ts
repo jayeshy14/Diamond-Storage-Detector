@@ -14,11 +14,16 @@ interface CliOptions {
   markdown?: boolean;
   severity: Severity;
   ignore: string[];
+  noDefaultIgnore?: boolean;
 }
 
 async function run(target: string, opts: CliOptions): Promise<void> {
   const result = await detect(
-    { path: target, ignoreGlobs: opts.ignore },
+    {
+      path: target,
+      ignoreGlobs: opts.ignore,
+      noDefaultIgnore: opts.noDefaultIgnore,
+    },
     defaultAnalyzers,
   );
 
@@ -65,9 +70,13 @@ program
   )
   .option(
     "--ignore <glob...>",
-    "Skip files matching these globs (relative to project root)",
+    "Skip source files matching these globs (in addition to defaults: lib/**, test/**, script/**, **/*.t.sol, **/*.s.sol)",
     (v: string, prev: string[] = []) => prev.concat(v),
     [] as string[],
+  )
+  .option(
+    "--no-default-ignore",
+    "Disable the built-in lib/test/script ignore list and scan everything in out/",
   )
   .action(async (target: string, opts: CliOptions) => {
     try {

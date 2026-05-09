@@ -89,14 +89,14 @@ function extractSourcePath(artifactPath: string, parsed: RawArtifact): string {
 }
 
 export interface LoadOptions {
-  ignore?: (relPath: string) => boolean;
+  ignoreSourcePath?: (sourcePath: string) => boolean;
 }
 
 export async function loadFoundryArtifacts(
   inputPath: string,
   opts: LoadOptions = {},
 ): Promise<FacetArtifact[]> {
-  const { root, outDir } = await resolveFoundryRoot(inputPath);
+  const { outDir } = await resolveFoundryRoot(inputPath);
   if (!(await fileExists(outDir))) {
     throw new Error(
       `Foundry out/ directory not found at ${outDir}. Run \`forge build --extra-output storageLayout\` first.`,
@@ -107,9 +107,6 @@ export async function loadFoundryArtifacts(
   const artifacts: FacetArtifact[] = [];
 
   for (const file of files) {
-    const rel = path.relative(root, file);
-    if (opts.ignore?.(rel)) continue;
-
     const text = await fs.readFile(file, "utf8");
     let parsed: RawArtifact;
     try {
@@ -122,6 +119,8 @@ export async function loadFoundryArtifacts(
 
     const contractName = extractContractName(file);
     const sourcePath = extractSourcePath(file, parsed);
+
+    if (opts.ignoreSourcePath?.(sourcePath)) continue;
 
     artifacts.push({
       contractName,

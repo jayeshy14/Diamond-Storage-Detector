@@ -4,6 +4,7 @@ import { loadFoundryArtifacts } from "./parseArtifacts.js";
 export interface DetectOptions {
   path: string;
   ignoreGlobs?: string[];
+  noDefaultIgnore?: boolean;
 }
 
 export interface DetectionResult {
@@ -11,9 +12,16 @@ export interface DetectionResult {
   findings: Finding[];
 }
 
-function compileIgnore(globs: string[] | undefined): ((rel: string) => boolean) | undefined {
-  if (!globs || globs.length === 0) return undefined;
-  const patterns = globs.map((g) => {
+export const DEFAULT_IGNORE_GLOBS: readonly string[] = [
+  "lib/**",
+  "test/**",
+  "script/**",
+  "**/*.t.sol",
+  "**/*.s.sol",
+];
+
+function compilePatterns(globs: readonly string[]): RegExp[] {
+  return globs.map((g) => {
     const escaped = g
       .replace(/[.+^${}()|[\]\\]/g, "\\$&")
       .replace(/\*\*/g, "::DOUBLESTAR::")
@@ -22,7 +30,19 @@ function compileIgnore(globs: string[] | undefined): ((rel: string) => boolean) 
       .replace(/\?/g, ".");
     return new RegExp(`^${escaped}$`);
   });
-  return (rel: string) => patterns.some((p) => p.test(rel));
+}
+
+function buildIgnore(
+  userGlobs: string[] | undefined,
+  noDefault: boolean | undefined,
+): ((sourcePath: string) => boolean) | undefined {
+  const globs = [
+    ...(noDefault ? [] : DEFAULT_IGNORE_GLOBS),
+    ...(userGlobs ?? []),
+  ];
+  if (globs.length === 0) return undefined;
+  const patterns = compilePatterns(globs);
+  return (sourcePath: string) => patterns.some((p) => p.test(sourcePath));
 }
 
 export async function detect(
@@ -30,7 +50,7 @@ export async function detect(
   analyzers: Analyzer[],
 ): Promise<DetectionResult> {
   const artifacts = await loadFoundryArtifacts(options.path, {
-    ignore: compileIgnore(options.ignoreGlobs),
+    ignoreSourcePath: buildIgnore(options.ignoreGlobs, options.noDefaultIgnore),
   });
 
   const ctx: AnalyzerContext = {
