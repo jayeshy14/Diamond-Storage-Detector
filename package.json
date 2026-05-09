@@ -1,0 +1,48 @@
+{
+  "name": "diamond-detect",
+  "version": "0.0.1",
+  "description": "Static analyzer for EIP-2535 Diamond storage-slot collisions across facets",
+  "keywords": [
+    "solidity",
+    "diamond-proxy",
+    "eip-2535",
+    "eip-7201",
+    "static-analysis",
+    "foundry",
+    "smart-contracts",
+    "security-tools"
+  ],
+  "license": "MIT",
+  "author": "Jayesh Yadav",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "diamond-detect": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "picocolors": "^1.1.1",
+    "@noble/hashes": "^1.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.3.5",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
