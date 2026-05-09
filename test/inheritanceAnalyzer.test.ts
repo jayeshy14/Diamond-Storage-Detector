@@ -87,6 +87,50 @@ describe("inheritanceAnalyzer", () => {
     expect(findings).toEqual([]);
   });
 
+  it("does NOT flag two facets sharing the same struct type at the same slot (canonical AppStorage)", () => {
+    // Both facets declare `s` of `t_struct(LibAppStorage.AppStorage)13_storage` at slot 0.
+    // The contract field differs (each facet is its own path) but the variable is the same one.
+    const findings = inheritanceAnalyzer.run(
+      ctx([
+        facet("FacetA", "src/FacetA.sol", [
+          slot(
+            "src/FacetA.sol:FacetA",
+            "s",
+            "t_struct(LibAppStorage.AppStorage)13_storage",
+            "0",
+            0,
+          ),
+        ]),
+        facet("FacetB", "src/FacetB.sol", [
+          slot(
+            "src/FacetB.sol:FacetB",
+            "s",
+            "t_struct(LibAppStorage.AppStorage)13_storage",
+            "0",
+            0,
+          ),
+        ]),
+      ]),
+    );
+    expect(findings).toEqual([]);
+  });
+
+  it("DOES flag two facets that name the same variable but with different struct definitions (drift)", () => {
+    // Same label `s`, but different astIds → different type identities.
+    const findings = inheritanceAnalyzer.run(
+      ctx([
+        facet("FacetA", "src/FacetA.sol", [
+          slot("src/FacetA.sol:FacetA", "s", "t_struct(AppStorage)54_storage", "0", 0),
+        ]),
+        facet("FacetB", "src/FacetB.sol", [
+          slot("src/FacetB.sol:FacetB", "s", "t_struct(AppStorage)46_storage", "0", 0),
+        ]),
+      ]),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.facets.sort()).toEqual(["FacetA", "FacetB"]);
+  });
+
   it("treats different (slot,offset) combos as distinct keys", () => {
     // Two packed variables in slot 0 — different offsets, different declarations → not flagged together
     const findings = inheritanceAnalyzer.run(

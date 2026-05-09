@@ -21,7 +21,11 @@ function keyOf(s: StorageLayoutSlot): string {
 }
 
 function declarationKey(s: StorageLayoutSlot): string {
-  return `${s.contract}::${s.label}::${s.type}`;
+  // Don't include `s.contract` — when a facet declares its own state, the contract
+  // field is the facet's own path, which differs across facets even when both reference
+  // the *same* conceptual variable. Same label + same type-id (incl. astId) means
+  // it's the canonical shared-storage pattern, not drift.
+  return `${s.label}::${s.type}`;
 }
 
 export function collectSlotEntries(artifacts: FacetArtifact[]): Map<string, SlotEntry[]> {
@@ -64,10 +68,12 @@ export const inheritanceAnalyzer: Analyzer = {
       const sample = entries[0]!.slot;
       const slotHex = "0x" + BigInt(sample.slot).toString(16).padStart(64, "0");
       const facets = Array.from(facetNames).sort();
-      const declarationsForMessage = Array.from(declarations.keys()).map((k) => {
-        const [contract, label, type] = k.split("::");
-        return `${label}:${type} (declared in ${contract})`;
-      });
+      const declarationsForMessage = Array.from(declarations.entries()).map(
+        ([_, items]) => {
+          const sample = items[0]!.slot;
+          return `${sample.label}:${sample.type} (declared in ${sample.contract})`;
+        },
+      );
 
       const locations: SourceLocation[] = entries.map((e) => ({
         file: e.artifact.sourcePath,
