@@ -444,26 +444,32 @@ function isUsedAsSlot(
   return false;
 }
 
+/**
+ * Every bytes32 slot pointer we can prove is used as Diamond Storage: keccak256
+ * namespace constants, precomputed literals, inline ERC-7201 formulas, and direct
+ * `assembly { x.slot := <literal> }` writes. Constant-backed entries are gated on
+ * proof-of-use so role ids / event topics are excluded; assembly writes are the use
+ * themselves. This is the single source of truth for both collision detection and
+ * the storage-region inventory.
+ */
+export function collectGatedSlotConstants(ctx: AnalyzerContext): SlotConstant[] {
+  const constants = [
+    ...collectSlotConstants(ctx),
+    ...collectLiteralSlotConstants(ctx),
+    ...collectFormulaSlotConstants(ctx),
+  ];
+  const slotUsedIds = collectSlotUsedDeclarationIds(ctx.artifacts);
+  const aliases = collectAliases(ctx.artifacts);
+  return [
+    ...constants.filter((c) => isUsedAsSlot(c.declarationId, slotUsedIds, aliases)),
+    ...collectAssemblyLiteralSlots(ctx.artifacts),
+  ];
+}
+
 export const diamondStorageAnalyzer: Analyzer = {
   name: "diamond-storage-namespace",
   run(ctx) {
-    const constants = [
-      ...collectSlotConstants(ctx),
-      ...collectLiteralSlotConstants(ctx),
-      ...collectFormulaSlotConstants(ctx),
-    ];
-    const slotUsedIds = collectSlotUsedDeclarationIds(ctx.artifacts);
-    const aliases = collectAliases(ctx.artifacts);
-
-    // Only flag constants we can confirm are used as Diamond Storage slot pointers.
-    // Module ids, role ids, event topics, etc. share the syntactic shape but aren't
-    // collisions even when two contracts agree on the same string. Direct
-    // `assembly { x.slot := <literal> }` writes are themselves the use, so they skip
-    // the gate and join the same comparison space.
-    const slotConstants = [
-      ...constants.filter((c) => isUsedAsSlot(c.declarationId, slotUsedIds, aliases)),
-      ...collectAssemblyLiteralSlots(ctx.artifacts),
-    ];
+    const slotConstants = collectGatedSlotConstants(ctx);
 
     const bySlot = new Map<string, SlotConstant[]>();
     for (const c of slotConstants) {

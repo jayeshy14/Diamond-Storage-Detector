@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderTerminal } from "../src/reporter/terminal.js";
-import type { Finding } from "../src/detector/types.js";
+import type { Finding, StorageRegion } from "../src/detector/types.js";
 
 // Strip ANSI so assertions hold regardless of FORCE_COLOR / TTY state.
 // eslint-disable-next-line no-control-regex
@@ -52,5 +52,39 @@ describe("renderTerminal", () => {
     const out = stripAnsi(renderTerminal([], 1, new Map()));
     expect(out).toContain("1 artifact scanned");
     expect(out).not.toContain("1 artifacts scanned");
+  });
+
+  it("credits a clean repo by listing the storage regions it verified", () => {
+    const inventory: StorageRegion[] = [
+      {
+        slot: "0x84d86c34a05b71953e57fe7dafea685384b33934d9ddaebd0cf7709e74b71bab",
+        label: "myapp.vaults",
+        kind: "erc7201",
+        contract: "LibVaults",
+        file: "src/LibVaults.sol",
+        line: 12,
+      },
+      {
+        slot: "0x340080245a7d3e67835fb5055646777827d09fc7212fda4d8d724367e1215700",
+        label: "STRATEGY_SLOT",
+        kind: "hardcoded",
+        contract: "LibStrategy",
+        file: "src/LibStrategy.sol",
+        line: 9,
+      },
+    ];
+    const out = stripAnsi(renderTerminal([], 5, new Map(), inventory));
+    expect(out).toContain("no storage collisions detected");
+    expect(out).toContain("Verified 2 storage regions");
+    expect(out).toContain("myapp.vaults");
+    expect(out).toContain("STRATEGY_SLOT");
+    expect(out).toContain("src/LibVaults.sol:12");
+    expect(out).toContain("Nicely done");
+  });
+
+  it("still emits just the one-liner when there is no inventory", () => {
+    const out = stripAnsi(renderTerminal([], 2, new Map(), []));
+    expect(out).toContain("no storage collisions detected");
+    expect(out).not.toContain("Verified");
   });
 });

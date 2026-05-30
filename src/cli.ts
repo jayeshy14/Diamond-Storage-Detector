@@ -42,7 +42,12 @@ async function run(target: string, opts: CliOptions): Promise<void> {
     ? renderJson(result.findings, result.artifacts.length)
     : opts.markdown
       ? renderMarkdown(result.findings, result.artifacts.length)
-      : renderTerminal(result.findings, result.artifacts.length, result.rawSources);
+      : renderTerminal(
+          result.findings,
+          result.artifacts.length,
+          result.rawSources,
+          result.inventory,
+        );
 
   process.stdout.write(output + "\n");
 

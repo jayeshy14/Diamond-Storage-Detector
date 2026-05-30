@@ -1,5 +1,6 @@
-import type { Analyzer, AnalyzerContext, FacetArtifact, Finding } from "./types.js";
+import type { Analyzer, AnalyzerContext, FacetArtifact, Finding, StorageRegion } from "./types.js";
 import { loadFoundryArtifacts, loadRawSources } from "./parseArtifacts.js";
+import { buildInventory } from "./inventory.js";
 
 export interface DetectOptions {
   path: string;
@@ -12,6 +13,7 @@ export interface DetectionResult {
   artifacts: FacetArtifact[];
   findings: Finding[];
   rawSources: Map<string, string>;
+  inventory: StorageRegion[];
 }
 
 export const DEFAULT_IGNORE_GLOBS: readonly string[] = [
@@ -80,5 +82,7 @@ export async function detect(
     findings.push(...out);
   }
 
-  return { artifacts, findings, rawSources };
+  const inventory = buildInventory(ctx);
+
+  return { artifacts, findings, rawSources, inventory };
 }

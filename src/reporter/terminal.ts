@@ -1,5 +1,11 @@
 import pc from "picocolors";
-import type { Finding, FindingKind, Severity, SourceLocation } from "../detector/types.js";
+import type {
+  Finding,
+  FindingKind,
+  Severity,
+  SourceLocation,
+  StorageRegion,
+} from "../detector/types.js";
 
 const SEVERITY_RANK: Record<Severity, number> = { info: 0, warn: 1, error: 2 };
 
@@ -90,15 +96,57 @@ function renderFrame(loc: SourceLocation, span: Span, sev: SevStyle, note?: stri
   ];
 }
 
+const KIND_TAG: Record<StorageRegion["kind"], string> = {
+  erc7201: "erc7201",
+  namespace: "namespace",
+  hardcoded: "precomputed",
+};
+
+function renderInventory(inventory: StorageRegion[]): string[] {
+  const lines: string[] = [];
+  const shown = inventory.slice(0, 60);
+  const labelW = Math.max(...shown.map((r) => r.label.length), 0);
+  const tagW = Math.max(...shown.map((r) => KIND_TAG[r.kind].length), 0);
+  const contractW = Math.max(...shown.map((r) => r.contract.length), 0);
+
+  lines.push("");
+  lines.push(
+    pc.bold(`Verified ${inventory.length} storage region${inventory.length === 1 ? "" : "s"}`) +
+      pc.dim(", each on its own slot:"),
+  );
+  lines.push("");
+  for (const r of shown) {
+    const where = r.line ? `${r.file}:${r.line}` : r.file;
+    lines.push(
+      `  ${pc.green("•")} ${pc.green(r.label.padEnd(labelW))}  ` +
+        `${pc.dim(KIND_TAG[r.kind].padEnd(tagW))}  ` +
+        `${pc.cyan(shortSlot(r.slot))}  ` +
+        `${r.contract.padEnd(contractW)}  ${pc.dim(where)}`,
+    );
+  }
+  if (inventory.length > shown.length) {
+    lines.push(`  ${pc.dim(`… and ${inventory.length - shown.length} more`)}`);
+  }
+  lines.push("");
+  lines.push(
+    pc.green("Every facet keeps to its own namespace, and no two regions share a slot. ") +
+      pc.green(pc.bold("Nicely done.")),
+  );
+  return lines;
+}
+
 export function renderTerminal(
   findings: Finding[],
   facetCount: number,
   rawSources?: Map<string, string>,
+  inventory: StorageRegion[] = [],
 ): string {
   const artifactsNote = pc.dim(`${facetCount} artifact${facetCount === 1 ? "" : "s"} scanned`);
 
   if (findings.length === 0) {
-    return `${pc.green(pc.bold("✔ no storage collisions detected"))}  ${pc.dim("·")}  ${artifactsNote}`;
+    const header = `${pc.green(pc.bold("✔ no storage collisions detected"))}  ${pc.dim("·")}  ${artifactsNote}`;
+    if (inventory.length === 0) return header;
+    return [header, ...renderInventory(inventory)].join("\n");
   }
 
   const sorted = [...findings].sort((a, b) => SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity]);

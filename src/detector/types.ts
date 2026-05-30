@@ -27,6 +27,15 @@ export interface Finding {
   detail?: Record<string, unknown>;
 }
 
+export interface StorageRegion {
+  slot: string;
+  label: string; // namespace string, erc7201 id, or the slot constant's name
+  kind: "erc7201" | "namespace" | "hardcoded";
+  contract: string;
+  file: string;
+  line?: number;
+}
+
 export interface StorageLayoutSlot {
   astId: number;
   contract: string;
