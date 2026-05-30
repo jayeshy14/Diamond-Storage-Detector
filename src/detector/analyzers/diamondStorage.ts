@@ -484,7 +484,7 @@ export const diamondStorageAnalyzer: Analyzer = {
       const facets = Array.from(new Set(group.map((g) => g.contract)));
       const locations: SourceLocation[] = group.map((g) => {
         const sourceText = ctx.rawSources.get(g.sourcePath);
-        return { file: g.sourcePath, line: lineFromSrc(g.src, sourceText) };
+        return { file: g.sourcePath, line: lineFromSrc(g.src, sourceText), src: g.src };
       });
 
       let message: string;

@@ -92,6 +92,28 @@ export interface LoadOptions {
   ignoreSourcePath?: (sourcePath: string) => boolean;
 }
 
+/**
+ * Read the on-disk source text for each compilation-target source path, keyed by
+ * the same relative path the artifacts use. Missing files (e.g. dependencies that
+ * were filtered out) are skipped so the reporter degrades to file-only output.
+ */
+export async function loadRawSources(
+  inputPath: string,
+  sourcePaths: string[],
+): Promise<Map<string, string>> {
+  const { root } = await resolveFoundryRoot(inputPath);
+  const out = new Map<string, string>();
+  for (const sourcePath of new Set(sourcePaths)) {
+    if (out.has(sourcePath)) continue;
+    try {
+      out.set(sourcePath, await fs.readFile(path.join(root, sourcePath), "utf8"));
+    } catch {
+      // Source not readable from this root; reporter will fall back to file-only.
+    }
+  }
+  return out;
+}
+
 export async function loadFoundryArtifacts(
   inputPath: string,
   opts: LoadOptions = {},

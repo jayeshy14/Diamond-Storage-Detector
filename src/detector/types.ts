@@ -12,6 +12,9 @@ export interface SourceLocation {
   file: string;
   line?: number;
   column?: number;
+  // solc source mapping "byteOffset:byteLength:fileIndex", used by the terminal
+  // reporter to render a code frame with a caret underline of the exact span.
+  src?: string;
 }
 
 export interface Finding {

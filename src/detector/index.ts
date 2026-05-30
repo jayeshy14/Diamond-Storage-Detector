@@ -1,5 +1,5 @@
 import type { Analyzer, AnalyzerContext, FacetArtifact, Finding } from "./types.js";
-import { loadFoundryArtifacts } from "./parseArtifacts.js";
+import { loadFoundryArtifacts, loadRawSources } from "./parseArtifacts.js";
 
 export interface DetectOptions {
   path: string;
@@ -11,6 +11,7 @@ export interface DetectOptions {
 export interface DetectionResult {
   artifacts: FacetArtifact[];
   findings: Finding[];
+  rawSources: Map<string, string>;
 }
 
 export const DEFAULT_IGNORE_GLOBS: readonly string[] = [
@@ -62,9 +63,14 @@ export async function detect(
     ignoreSourcePath: buildIgnore(options.ignoreGlobs, options.noDefaultIgnore),
   });
 
+  const rawSources = await loadRawSources(
+    options.path,
+    artifacts.map((a) => a.sourcePath),
+  );
+
   const ctx: AnalyzerContext = {
     artifacts,
-    rawSources: new Map(),
+    rawSources,
     isFacet: buildIsFacet(options.facetGlobs),
   };
 
@@ -74,5 +80,5 @@ export async function detect(
     findings.push(...out);
   }
 
-  return { artifacts, findings };
+  return { artifacts, findings, rawSources };
 }

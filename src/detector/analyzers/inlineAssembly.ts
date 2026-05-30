@@ -75,7 +75,7 @@ export const inlineAssemblyAnalyzer: Analyzer = {
       slot: lit.slot,
       message: `inline assembly writes to a hardcoded slot (sstore(${lit.rawValue}, …)) — confirm no overlap with computed storage slots.`,
       facets: [lit.artifact.contractName],
-      locations: [{ file: lit.artifact.sourcePath }],
+      locations: [{ file: lit.artifact.sourcePath, src: lit.src }],
       detail: { rawValue: lit.rawValue, src: lit.src },
     }));
   },

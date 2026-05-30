@@ -116,7 +116,7 @@ export const erc7201Analyzer: Analyzer = {
       if (distinctSources.size < 2) continue;
       const ids = Array.from(new Set(group.map((g) => g.namespaceId)));
       const facets = Array.from(new Set(group.map((g) => g.contract)));
-      const locations: SourceLocation[] = group.map((g) => ({ file: g.sourcePath }));
+      const locations: SourceLocation[] = group.map((g) => ({ file: g.sourcePath, src: g.src }));
       findings.push({
         kind: "erc7201-namespace",
         severity: "error",
