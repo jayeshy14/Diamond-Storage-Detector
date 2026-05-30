@@ -1,5 +1,6 @@
 import { keccak_256 } from "@noble/hashes/sha3";
 import type { Analyzer, AnalyzerContext, FacetArtifact, Finding, SourceLocation } from "../types.js";
+import { erc7201Slot } from "../../lib/eip7201.js";
 
 interface AstNode {
   nodeType?: string;
@@ -9,7 +10,11 @@ interface AstNode {
 interface SlotConstant {
   declarationId: number;
   variableName: string;
-  namespace: string;
+  // The keccak256 string namespace, or null when the slot is a hardcoded
+  // precomputed literal (e.g. `bytes32 constant S = 0x3400...00`). Literal slots
+  // are the gas-optimized ERC-7201 idiom: the seed is computed offline and pasted
+  // as a constant, so there is no string to recover from the AST.
+  namespace: string | null;
   slot: string;
   contract: string;
   sourcePath: string;
@@ -41,6 +46,86 @@ function extractKeccakStringArg(value: unknown): string | null {
   const arg = args[0] as AstNode;
   if (arg.nodeType !== "Literal" || arg.kind !== "string") return null;
   return typeof arg.value === "string" ? arg.value : null;
+}
+
+/**
+ * Read a `bytes32 constant = <number literal>` value as a normalized 32-byte slot.
+ * Handles the precomputed-literal ERC-7201 pattern (`0x3400...00`) and decimal
+ * literals (`bytes32 constant S = 0`). Returns null for anything that is not a
+ * plain number literal, including `keccak256("...")` (handled separately) and
+ * `hex"..."` byte-string literals, which are not used as storage-slot pointers.
+ */
+function extractBytes32HexLiteral(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as AstNode;
+  if (v.nodeType !== "Literal" || v.kind !== "number") return null;
+  if (typeof v.value !== "string") return null;
+  try {
+    const big = BigInt(v.value);
+    if (big < 0n) return null;
+    return "0x" + big.toString(16).padStart(64, "0");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Recognize the canonical EIP-7201 slot expression written inline in a constant
+ * initializer, e.g.:
+ *   keccak256(abi.encode(uint256(keccak256("ns")) - 1)) & ~bytes32(uint256(0xff))
+ * Returns the namespace string if the value subtree contains exactly one
+ * keccak256(<string literal>), a subtraction by 1, and a bitwise-and mask — the
+ * three structural markers of the formula. This is deliberately structural rather
+ * than an exact tree match so reformatting/parenthesization variants still match,
+ * while a wrong formula (missing the -1 or the mask) does not.
+ */
+function findKeccakStringArg(node: unknown): string | null {
+  if (!node || typeof node !== "object") return null;
+  const v = node as AstNode;
+  if (v.nodeType !== "FunctionCall") return null;
+  const expr = v.expression as AstNode | undefined;
+  if (expr?.nodeType !== "Identifier" || expr.name !== "keccak256") return null;
+  const args = v.arguments as unknown;
+  if (!Array.isArray(args) || args.length !== 1) return null;
+  const arg = args[0] as AstNode;
+  if (arg.nodeType !== "Literal" || arg.kind !== "string") return null;
+  return typeof arg.value === "string" ? arg.value : null;
+}
+
+function someNode(node: unknown, pred: (n: AstNode) => boolean): boolean {
+  if (!node || typeof node !== "object") return false;
+  const n = node as AstNode;
+  if (typeof n.nodeType === "string" && pred(n)) return true;
+  for (const key of Object.keys(n)) {
+    const value = n[key];
+    if (Array.isArray(value)) {
+      if (value.some((c) => someNode(c, pred))) return true;
+    } else if (value && typeof value === "object") {
+      if (someNode(value, pred)) return true;
+    }
+  }
+  return false;
+}
+
+function extractErc7201FormulaNamespace(value: unknown): string | null {
+  const strings: string[] = [];
+  someNode(value, (n) => {
+    const s = findKeccakStringArg(n);
+    if (s !== null) strings.push(s);
+    return false;
+  });
+  if (strings.length !== 1) return null;
+  const hasSubOne = someNode(
+    value,
+    (n) =>
+      n.nodeType === "BinaryOperation" &&
+      n.operator === "-" &&
+      (n.rightExpression as AstNode | undefined)?.nodeType === "Literal" &&
+      (n.rightExpression as AstNode).value === "1",
+  );
+  const hasMask = someNode(value, (n) => n.nodeType === "BinaryOperation" && n.operator === "&");
+  if (!hasSubOne || !hasMask) return null;
+  return strings[0]!;
 }
 
 function lineFromSrc(src: unknown, sourceText?: string): number | undefined {
@@ -104,6 +189,140 @@ export function collectSlotConstants(ctx: AnalyzerContext): SlotConstant[] {
         variableName,
         namespace,
         slot: keccak256Hex(namespace),
+        contract,
+        sourcePath: artifact.sourcePath,
+        src,
+      });
+    });
+  }
+  return out;
+}
+
+/**
+ * Collect `bytes32 constant = <precomputed literal>` declarations. These are the
+ * gas-optimized ERC-7201 / hardcoded-slot pattern: the namespace hash is computed
+ * offline and pasted as a literal, with no `keccak256("...")` in source and often
+ * no `@custom:storage-location` annotation, so neither collectSlotConstants nor
+ * the erc7201 analyzer sees them. Without this, two facets that share an identical
+ * precomputed slot are a silent, undetected collision. The analyzer gates these on
+ * isUsedAsSlot just like keccak constants, so role ids / event topics that happen
+ * to be bytes32 literals do not produce false positives.
+ */
+export function collectLiteralSlotConstants(ctx: AnalyzerContext): SlotConstant[] {
+  const seen = new Set<string>();
+  const out: SlotConstant[] = [];
+
+  for (const artifact of ctx.artifacts) {
+    if (!artifact.ast) continue;
+    walkAst(artifact.ast, (node, parents) => {
+      if (!isBytes32Constant(node)) return;
+      // keccak256("...") namespaces are handled by collectSlotConstants.
+      if (extractKeccakStringArg(node.value) !== null) return;
+      const slot = extractBytes32HexLiteral(node.value);
+      if (slot === null) return;
+      const declarationId = typeof node.id === "number" ? node.id : -1;
+      const variableName = (node.name as string) ?? "<anon>";
+      const contract = declaringContract(parents) ?? artifact.contractName;
+      const src = node.src as string | undefined;
+      const dedupeKey = `${artifact.sourcePath}::${contract}::${variableName}::${src ?? ""}`;
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+      out.push({
+        declarationId,
+        variableName,
+        namespace: null,
+        slot,
+        contract,
+        sourcePath: artifact.sourcePath,
+        src,
+      });
+    });
+  }
+  return out;
+}
+
+/**
+ * Collect `bytes32 constant = keccak256(abi.encode(uint256(keccak256("ns")) - 1)) & ~bytes32(uint256(0xff))`
+ * declarations: the ERC-7201 slot formula written inline in the constant, with no
+ * `@custom:storage-location` annotation (so the erc7201 analyzer never sees it) and
+ * no bare literal (so collectLiteralSlotConstants never sees it). The slot is the
+ * ERC-7201 location of the recovered namespace, so these enter the same comparison
+ * space as literals and keccak constants and cross-detect against them.
+ */
+export function collectFormulaSlotConstants(ctx: AnalyzerContext): SlotConstant[] {
+  const seen = new Set<string>();
+  const out: SlotConstant[] = [];
+
+  for (const artifact of ctx.artifacts) {
+    if (!artifact.ast) continue;
+    walkAst(artifact.ast, (node, parents) => {
+      if (!isBytes32Constant(node)) return;
+      // Plain keccak256("ns") and bare literals are handled by the other collectors.
+      if (extractKeccakStringArg(node.value) !== null) return;
+      const namespace = extractErc7201FormulaNamespace(node.value);
+      if (namespace === null) return;
+      const declarationId = typeof node.id === "number" ? node.id : -1;
+      const variableName = (node.name as string) ?? "<anon>";
+      const contract = declaringContract(parents) ?? artifact.contractName;
+      const src = node.src as string | undefined;
+      const dedupeKey = `${artifact.sourcePath}::${contract}::${variableName}::${src ?? ""}`;
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+      out.push({
+        declarationId,
+        variableName,
+        namespace,
+        slot: erc7201Slot(namespace),
+        contract,
+        sourcePath: artifact.sourcePath,
+        src,
+      });
+    });
+  }
+  return out;
+}
+
+/**
+ * Collect direct `assembly { x.slot := <number literal> }` assignments — a hardcoded
+ * slot written straight into assembly without going through a named constant. These
+ * are inherent slot uses (no isUsedAsSlot gate needed) and feed the same comparison
+ * space, so two facets pinning the same literal slot in assembly are caught.
+ */
+export function collectAssemblyLiteralSlots(artifacts: FacetArtifact[]): SlotConstant[] {
+  const seen = new Set<string>();
+  const out: SlotConstant[] = [];
+  for (const artifact of artifacts) {
+    if (!artifact.ast) continue;
+    walkAst(artifact.ast, (node, parents) => {
+      if (node.nodeType !== "YulAssignment") return;
+      const targets = node.variableNames as AstNode[] | undefined;
+      const targetsSlot =
+        Array.isArray(targets) &&
+        targets.some((t) => typeof t.name === "string" && t.name.endsWith(".slot"));
+      if (!targetsSlot) return;
+      const value = node.value as AstNode | undefined;
+      if (value?.nodeType !== "YulLiteral" || value.kind !== "number") return;
+      if (typeof value.value !== "string") return;
+      let slot: string;
+      try {
+        const big = BigInt(value.value);
+        if (big < 0n) return;
+        slot = "0x" + big.toString(16).padStart(64, "0");
+      } catch {
+        return;
+      }
+      const contract = declaringContract(parents) ?? artifact.contractName;
+      const src = node.src as string | undefined;
+      // The same library AST is emitted into every consumer artifact; dedupe by the
+      // source location so a single assignment is not counted once per artifact.
+      const dedupeKey = `${artifact.sourcePath}::${contract}::${slot}::${src ?? ""}`;
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+      out.push({
+        declarationId: -1,
+        variableName: "<assembly literal>",
+        namespace: null,
+        slot,
         contract,
         sourcePath: artifact.sourcePath,
         src,
@@ -228,16 +447,23 @@ function isUsedAsSlot(
 export const diamondStorageAnalyzer: Analyzer = {
   name: "diamond-storage-namespace",
   run(ctx) {
-    const constants = collectSlotConstants(ctx);
+    const constants = [
+      ...collectSlotConstants(ctx),
+      ...collectLiteralSlotConstants(ctx),
+      ...collectFormulaSlotConstants(ctx),
+    ];
     const slotUsedIds = collectSlotUsedDeclarationIds(ctx.artifacts);
     const aliases = collectAliases(ctx.artifacts);
 
     // Only flag constants we can confirm are used as Diamond Storage slot pointers.
     // Module ids, role ids, event topics, etc. share the syntactic shape but aren't
-    // collisions even when two contracts agree on the same string.
-    const slotConstants = constants.filter((c) =>
-      isUsedAsSlot(c.declarationId, slotUsedIds, aliases),
-    );
+    // collisions even when two contracts agree on the same string. Direct
+    // `assembly { x.slot := <literal> }` writes are themselves the use, so they skip
+    // the gate and join the same comparison space.
+    const slotConstants = [
+      ...constants.filter((c) => isUsedAsSlot(c.declarationId, slotUsedIds, aliases)),
+      ...collectAssemblyLiteralSlots(ctx.artifacts),
+    ];
 
     const bySlot = new Map<string, SlotConstant[]>();
     for (const c of slotConstants) {
@@ -250,23 +476,42 @@ export const diamondStorageAnalyzer: Analyzer = {
     for (const [slot, group] of bySlot) {
       const distinctSources = new Set(group.map((g) => g.sourcePath));
       if (distinctSources.size < 2) continue;
-      const namespaces = Array.from(new Set(group.map((g) => g.namespace)));
+      const namespaces = Array.from(
+        new Set(group.map((g) => g.namespace).filter((n): n is string => n !== null)),
+      );
+      const variableNames = Array.from(new Set(group.map((g) => g.variableName)));
+      const hasLiteral = group.some((g) => g.namespace === null);
       const facets = Array.from(new Set(group.map((g) => g.contract)));
       const locations: SourceLocation[] = group.map((g) => {
         const sourceText = ctx.rawSources.get(g.sourcePath);
         return { file: g.sourcePath, line: lineFromSrc(g.src, sourceText) };
       });
+
+      let message: string;
+      if (!hasLiteral) {
+        // Pure keccak256-namespace collision: original behavior, unchanged.
+        message =
+          namespaces.length === 1
+            ? `Diamond Storage namespace "${namespaces[0]}" is declared in ${distinctSources.size} different sources, all resolving to the same slot.`
+            : `Distinct namespaces ${namespaces.map((n) => `"${n}"`).join(", ")} hash to the same slot.`;
+      } else if (namespaces.length === 0) {
+        // Every member is a hardcoded precomputed literal slot.
+        message = `Hardcoded storage slot ${slot} is used as a Diamond Storage pointer by ${distinctSources.size} different sources (${variableNames.join(", ")}), so distinct facets share the same slot.`;
+      } else {
+        // Mixed: a hardcoded literal that equals one or more keccak256 namespaces.
+        message = `Hardcoded slot ${slot} collides with namespace(s) ${namespaces
+          .map((n) => `"${n}"`)
+          .join(", ")} — they resolve to the same storage slot.`;
+      }
+
       findings.push({
         kind: "diamond-storage-namespace",
         severity: "error",
         slot,
-        message:
-          namespaces.length === 1
-            ? `Diamond Storage namespace "${namespaces[0]}" is declared in ${distinctSources.size} different sources, all resolving to the same slot.`
-            : `Distinct namespaces ${namespaces.map((n) => `"${n}"`).join(", ")} hash to the same slot.`,
+        message,
         facets,
         locations,
-        detail: { namespaces, declarations: group },
+        detail: { namespaces, variableNames, declarations: group },
       });
     }
     return findings;
