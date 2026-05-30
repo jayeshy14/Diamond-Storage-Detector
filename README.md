@@ -8,7 +8,7 @@ npx diamond-detect .
 
 ## Why this tool exists
 
-A Diamond proxy `delegatecall`s into many facet contracts, and **every facet shares the proxy's storage**. When two facets accidentally land at the same slot — by reusing a Diamond Storage namespace, by drifting AppStorage layouts, by reusing an EIP-7201 id, or by writing literal slots in inline assembly — the result is silent corruption: one facet's writes overwrite another's data with no error and no revert.
+A Diamond proxy `delegatecall`s into many facet contracts, and **every facet shares the proxy's storage**. When two facets accidentally land at the same slot, whether by reusing a Diamond Storage namespace string, by hardcoding the same precomputed slot, by computing the same ERC-7201 namespace inline, by drifting AppStorage layouts, by reusing an EIP-7201 id, or by writing a literal slot directly in inline assembly, the result is silent corruption where one facet's writes overwrite another's data with no error and no revert.
 
 Slither catches general storage issues but doesn't speak Diamond. Most teams either hand-audit by spreadsheet or rely on a one-off script. `diamond-detect` is a focused, Diamond-specific analyzer you can drop into CI in three lines of YAML.
 
@@ -60,23 +60,40 @@ This populates `out/` with artifact JSON files that include the AST and storage 
 diamond-detect .
 ```
 
-If everything is fine you'll see:
+If everything is fine you'll see a confirmation, plus every storage region the tool verified so you can see it actually inspected each one and that they all sit on distinct slots:
 
 ```
-scanned 12 contract artifact(s)
-✓ no storage collisions detected
+✔ no storage collisions detected  ·  8 artifacts scanned
+
+Verified 4 storage regions, each on its own slot:
+
+  • myapp.vaults                       erc7201      0x84d86c…b71bab  LibVaults    src/LibVaults.sol:12
+  • myapp.strategies                   namespace    0xa1b2c3…445566  LibStrategies  src/LibStrategies.sol:9
+  • AAVE_STORAGE_SLOT                   precomputed  0x340080…215700  AaveFacet    src/facets/AaveFacet.sol:28
+  • diamond.standard.diamond.storage   namespace    0xc8fcad…2c131c  LibDiamond   src/libraries/LibDiamond.sol:8
+
+Every facet keeps to its own namespace, and no two regions share a slot. Nicely done.
 ```
 
-If something is wrong you'll see one or more findings with the slot, the colliding contracts, and a hint at the cause:
+If something is wrong you'll get one diagnostic per collision, with a code frame pointing at the exact line in every colliding file, the shared slot, and a hint at the cause:
 
 ```
-ERROR diamond-storage-namespace  0x84d86c34a05b71953e57fe7dafea685384b33934d9ddaebd0cf7709e74b71bab
-  Diamond Storage namespace "myapp.strategies" is declared in 2 different sources, all resolving to the same slot.
-  facets: LibStrategies, LibVaults
-  at src/LibStrategies.sol
-  at src/LibVaults.sol
+error[diamond-storage-namespace]: Diamond Storage namespace "myapp.strategies" is declared in 2 different sources, all resolving to the same slot.
+  ╭─[src/LibStrategies.sol:5:5]
+    │
+  5 │     bytes32 internal constant POSITION = keccak256("myapp.strategies");
+    ·     ────────────────────────────────────────────────────────────────── slot 0x84d86c…b71bab
+    ╰─
+  ╭─[src/LibVaults.sol:8:5]
+    │
+  8 │     bytes32 internal constant POSITION = keccak256("myapp.strategies");
+    ·     ────────────────────────────────────────────────────────────────── same slot here
+    ╰─
+  = facets: LibStrategies, LibVaults
+  = slot:   0x84d86c34a05b71953e57fe7dafea685384b33934d9ddaebd0cf7709e74b71bab
+  = help:   give every facet a unique storage seed; never reuse a namespace string, precomputed slot, or formula across facets
 
-1 error(s), 0 warning(s)
+✖ 1 error  ·  2 artifacts scanned
 ```
 
 Exit code is `1` whenever a finding meets your `--severity` threshold (default `warn`), `0` otherwise, `2` on internal errors.
@@ -87,7 +104,7 @@ Run [`examples/`](./examples/) to see each one in action — every example ships
 
 | Kind | Severity | What it catches |
 |---|---|---|
-| `diamond-storage-namespace` | error | Two libraries declare `bytes32 constant POSITION = keccak256("...")` with the same string. ([01-namespace-collision](./examples/01-namespace-collision/)) |
+| `diamond-storage-namespace` | error | Two facets resolve to the same Diamond Storage slot, whether the slot comes from `keccak256("...")`, a hardcoded precomputed literal (`bytes32 constant S = 0x..`), the inline ERC-7201 formula written without an annotation, or a direct `assembly { x.slot := <literal> }`. All four representations are compared in one space, so a literal in one facet that matches a formula or namespace in another is caught too. ([01-namespace-collision](./examples/01-namespace-collision/)) |
 | `appstorage-fingerprint` | error | The same fully-qualified struct (e.g. `struct LibAppStorage.AppStorage`) has different layouts across facets — the stale-artifact / forgot-to-rebuild bug. ([02-appstorage-shift](./examples/02-appstorage-shift/)) |
 | `erc7201-namespace` | error | Two contracts annotate `@custom:storage-location erc7201:<id>` with the same id. ([03-erc7201-collision](./examples/03-erc7201-collision/)) |
 | `inheritance-overlap` | warn | Two facets have state at the same slot whose `(label, type)` differ — e.g. `Ownable._owner` vs `MyOwnable.owner`. |
@@ -145,7 +162,7 @@ diamond-detect <path>                    Foundry project root or src/ folder
 
 ## Output formats
 
-- **Terminal** (default): coloured, one block per finding, summary footer.
+- **Terminal** (default): a code-frame diagnostic per collision that underlines the exact slot declaration in every colliding file, with `= facets / = slot / = help` notes and a coloured summary footer. A clean run instead lists every storage region it verified, with its slot and location, so you can confirm nothing was skipped. Colour is auto-disabled when the output is piped or running in CI.
 - **JSON** (`--json`): a stable shape suitable for piping into other tools.
 
   ```json
@@ -158,8 +175,8 @@ diamond-detect <path>                    Foundry project root or src/ folder
         "slot": "0x...",
         "message": "...",
         "facets": ["LibStrategies", "LibVaults"],
-        "locations": [{ "file": "src/LibStrategies.sol" }],
-        "detail": { "namespaces": ["myapp.strategies"], "declarations": [...] }
+        "locations": [{ "file": "src/LibStrategies.sol", "line": 5, "src": "120:54:0" }],
+        "detail": { "namespaces": ["myapp.strategies"], "variableNames": ["POSITION"], "declarations": [...] }
       }
     ]
   }
@@ -206,13 +223,13 @@ Tighten with `--severity error` if you only want to fail CI on hard collisions.
 
 ## Comparison
 
-| Tool | Diamond Storage namespaces | EIP-7201 ids | AppStorage drift | Hardcoded sstore slots |
-|---|---|---|---|---|
-| Slither | partial — general slot detector, not Diamond-aware | no | no | yes (separate detector) |
-| Hand-audit / spreadsheet | yes, manually | yes, manually | hard to spot | yes |
-| `diamond-detect` | yes | yes | yes | yes |
+| Tool | Diamond Storage namespaces | Precomputed / inline-formula slots | EIP-7201 ids | AppStorage drift | Hardcoded assembly slots |
+|---|---|---|---|---|---|
+| Slither | partial, a general slot detector that is not Diamond-aware | no | no | no | partial, raw `sstore` only |
+| Hand-audit / spreadsheet | yes, manually | error-prone by hand | yes, manually | hard to spot | yes, manually |
+| `diamond-detect` | yes | yes | yes | yes | yes |
 
-Slither remains excellent for general Solidity static analysis. Use both.
+Slither's storage layout does not model Diamond namespaced storage, which lives at hashed slots reached through assembly, so it cannot see a Diamond storage collision at all. It remains excellent for general Solidity static analysis, so run both.
 
 ## Roadmap
 
