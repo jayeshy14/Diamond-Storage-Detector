@@ -20,7 +20,7 @@ You should use it if:
 - You use Foundry to build (`out/` artifacts).
 - You want to catch namespace, AppStorage, EIP-7201, or inline-assembly slot collisions before they hit mainnet.
 
-You probably don't need it if you have only a handful of facets that all consume one canonical `LibAppStorage` and you read every storage layout diff manually. Even then, it's a 5-minute install — worth running once.
+You probably don't need it if you have only a handful of facets that all consume one canonical `LibAppStorage` and you read every storage layout diff manually. Even then, it's a 5-minute install that is worth running once.
 
 ## Install
 
@@ -100,14 +100,14 @@ Exit code is `1` whenever a finding meets your `--severity` threshold (default `
 
 ## What it detects
 
-Run [`examples/`](./examples/) to see each one in action — every example ships a buggy `before/` and a fixed `after/`.
+Run [`examples/`](./examples/) to see each one in action, since every example ships a buggy `before/` and a fixed `after/`.
 
 | Kind | Severity | What it catches |
 |---|---|---|
 | `diamond-storage-namespace` | error | Two facets resolve to the same Diamond Storage slot, whether the slot comes from `keccak256("...")`, a hardcoded precomputed literal (`bytes32 constant S = 0x..`), the inline ERC-7201 formula written without an annotation, or a direct `assembly { x.slot := <literal> }`. All four representations are compared in one space, so a literal in one facet that matches a formula or namespace in another is caught too. ([01-namespace-collision](./examples/01-namespace-collision/)) |
-| `appstorage-fingerprint` | error | The same fully-qualified struct (e.g. `struct LibAppStorage.AppStorage`) has different layouts across facets — the stale-artifact / forgot-to-rebuild bug. ([02-appstorage-shift](./examples/02-appstorage-shift/)) |
+| `appstorage-fingerprint` | error | The same fully-qualified struct (e.g. `struct LibAppStorage.AppStorage`) has different layouts across facets, the stale-artifact or forgot-to-rebuild bug. ([02-appstorage-shift](./examples/02-appstorage-shift/)) |
 | `erc7201-namespace` | error | Two contracts annotate `@custom:storage-location erc7201:<id>` with the same id. ([03-erc7201-collision](./examples/03-erc7201-collision/)) |
-| `inheritance-overlap` | warn | Two facets have state at the same slot whose `(label, type)` differ — e.g. `Ownable._owner` vs `MyOwnable.owner`. |
+| `inheritance-overlap` | warn | Two facets have state at the same slot whose `(label, type)` differ, for example `Ownable._owner` vs `MyOwnable.owner`. |
 | `inline-assembly-slot` | info | A literal slot is written via `sstore(0x42, …)`. Usually intentional, but reported so you can confirm it doesn't overlap a computed Diamond Storage slot. |
 
 A clean baseline that exercises every analyzer and produces no findings is in [`examples/04-clean/`](./examples/04-clean/).
@@ -116,7 +116,7 @@ A clean baseline that exercises every analyzer and produces no findings is in [`
 
 ### Scope to your real facets with `--facets`
 
-By default `diamond-detect` analyzes every contract in `src/`. Diamond projects often have non-facet contracts there too — registries, factories, libraries — and the inheritance-overlap analyzer can produce noisy advisories for them. Tell it where your facets actually live:
+By default `diamond-detect` analyzes every contract in `src/`. Diamond projects often have non-facet contracts there too (registries, factories, libraries), and the inheritance-overlap analyzer can produce noisy advisories for them. Tell it where your facets actually live:
 
 ```sh
 diamond-detect --facets 'src/facets/**' .
@@ -211,15 +211,15 @@ Tighten with `--severity error` if you only want to fail CI on hard collisions.
 
 ## Troubleshooting
 
-**"warning: no AST found in any artifact"** — your build didn't include AST output. Set `ast = true` in `foundry.toml` (under `[profile.default]`) and rebuild. Without AST, the namespace, EIP-7201, and inline-assembly analyzers can't run; only storage-layout-based ones (`appstorage-fingerprint`, `inheritance-overlap`) will fire.
+**"warning: no AST found in any artifact"**: your build didn't include AST output. Set `ast = true` in `foundry.toml` (under `[profile.default]`) and rebuild. Without AST, the namespace, EIP-7201, and inline-assembly analyzers can't run; only storage-layout-based ones (`appstorage-fingerprint`, `inheritance-overlap`) will fire.
 
-**"Foundry out/ directory not found"** — you haven't run `forge build` yet, or you pointed `diamond-detect` at the wrong directory. Pass either the project root (the directory with `foundry.toml`) or any subdirectory of it.
+**"Foundry out/ directory not found"**: you haven't run `forge build` yet, or you pointed `diamond-detect` at the wrong directory. Pass either the project root (the directory with `foundry.toml`) or any subdirectory of it.
 
-**Scans `0` artifacts** — the loader is filtering everything. If your facets live under non-standard paths (e.g. `src/diamond/**` and you also have files in `lib/diamond-3-hardhat/`), check whether the default-ignore is hiding them. Use `--no-default-ignore` to confirm, then add narrower `--ignore` patterns.
+**Scans `0` artifacts**: the loader is filtering everything. If your facets live under non-standard paths (e.g. `src/diamond/**` and you also have files in `lib/diamond-3-hardhat/`), check whether the default-ignore is hiding them. Use `--no-default-ignore` to confirm, then add narrower `--ignore` patterns.
 
-**Lots of `inheritance-overlap` warnings on registries / factories** — those are non-facet contracts. Scope the analyzer with `--facets 'src/facets/**'` (or wherever your facets live).
+**Lots of `inheritance-overlap` warnings on registries / factories**: those are non-facet contracts. Scope the analyzer with `--facets 'src/facets/**'` (or wherever your facets live).
 
-**Findings only when I rebuild?** — `forge build` is incremental. If you change a struct definition but don't touch the consumers, their artifacts stay stale and the analyzer doesn't see the new layout. Wipe with `forge clean && forge build` if you suspect drift.
+**Findings only when I rebuild?** `forge build` is incremental. If you change a struct definition but don't touch the consumers, their artifacts stay stale and the analyzer doesn't see the new layout. Wipe with `forge clean && forge build` if you suspect drift.
 
 ## Comparison
 
