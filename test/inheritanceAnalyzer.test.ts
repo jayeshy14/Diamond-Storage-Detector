@@ -131,6 +131,39 @@ describe("inheritanceAnalyzer", () => {
     expect(findings[0]!.facets.sort()).toEqual(["FacetA", "FacetB"]);
   });
 
+  it("flags two facets that independently declare the same elementary var at the same slot", () => {
+    // Regression: two facets each declare their *own* `address owner` at slot 0 for
+    // different purposes. Same label + same elementary type (no astId embedded in
+    // `t_address`), but distinct VariableDeclaration astIds → a real collision that
+    // must not collapse to one declaration key.
+    const findings = inheritanceAnalyzer.run(
+      ctx([
+        facet("FacetA", "src/FacetA.sol", [
+          slot("src/FacetA.sol:FacetA", "owner", "t_address", "0", 0, 101),
+        ]),
+        facet("FacetB", "src/FacetB.sol", [
+          slot("src/FacetB.sol:FacetB", "owner", "t_address", "0", 0, 202),
+        ]),
+      ]),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.kind).toBe("inheritance-overlap");
+    expect(findings[0]!.facets.sort()).toEqual(["FacetA", "FacetB"]);
+  });
+
+  it("does NOT flag the same inherited elementary var (one astId across facets)", () => {
+    // The counterpart: a single base declaration (`address _owner`, astId 42) inherited
+    // into both facets keeps one stable astId → one key → shared storage, not a collision.
+    const inherited = slot("lib/oz/Ownable.sol:Ownable", "_owner", "t_address", "0", 0, 42);
+    const findings = inheritanceAnalyzer.run(
+      ctx([
+        facet("FacetA", "src/FacetA.sol", [inherited]),
+        facet("FacetB", "src/FacetB.sol", [inherited]),
+      ]),
+    );
+    expect(findings).toEqual([]);
+  });
+
   it("treats different (slot,offset) combos as distinct keys", () => {
     // Two packed variables in slot 0 — different offsets, different declarations → not flagged together
     const findings = inheritanceAnalyzer.run(

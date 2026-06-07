@@ -59,6 +59,7 @@ function formulaSlotDeclaration(
   namespace: string,
   idOverride?: number,
   src = "0:0:0",
+  maskLiteralValue = "0xff",
 ) {
   const id = idOverride ?? freshId();
   return {
@@ -102,7 +103,7 @@ function formulaSlotDeclaration(
       rightExpression: {
         nodeType: "UnaryOperation",
         operator: "~",
-        subExpression: { nodeType: "Literal", kind: "number", value: "0xff" },
+        subExpression: { nodeType: "Literal", kind: "number", value: maskLiteralValue },
       },
     },
   } as unknown as ReturnType<typeof variableDeclaration>;
@@ -531,6 +532,20 @@ describe("collectFormulaSlotConstants", () => {
       ctx([
         libraryArtifact("LibA", "src/LibA.sol", [
           variableDeclaration("POSITION", "myapp.main"),
+        ]),
+      ]),
+    );
+    expect(got).toHaveLength(0);
+  });
+
+  it("rejects a formula whose mask is not the canonical ~0xff low-byte clear", () => {
+    // Same keccak/-1 shape but masked with 0xffff instead of 0xff. It computes a
+    // different slot, so it must not be misread as ERC-7201 and assigned the standard
+    // erc7201Slot(namespace) it does not occupy.
+    const got = collectFormulaSlotConstants(
+      ctx([
+        libraryArtifact("LibBadMask", "src/LibBadMask.sol", [
+          formulaSlotDeclaration("S", "myapp.main", undefined, "0:0:0", "0xffff"),
         ]),
       ]),
     );

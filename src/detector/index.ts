@@ -7,6 +7,15 @@ export interface DetectOptions {
   ignoreGlobs?: string[];
   noDefaultIgnore?: boolean;
   facetGlobs?: string[];
+  /**
+   * Pre-loaded artifacts and source text, bypassing the Foundry on-disk loader. Used by
+   * the on-chain history mode, which sources artifacts by recompiling verified source
+   * rather than reading `out/`. When set, `path` is ignored.
+   */
+  preloaded?: {
+    artifacts: FacetArtifact[];
+    rawSources: Map<string, string>;
+  };
 }
 
 export interface DetectionResult {
@@ -61,14 +70,17 @@ export async function detect(
   options: DetectOptions,
   analyzers: Analyzer[],
 ): Promise<DetectionResult> {
-  const artifacts = await loadFoundryArtifacts(options.path, {
-    ignoreSourcePath: buildIgnore(options.ignoreGlobs, options.noDefaultIgnore),
-  });
+  const ignore = buildIgnore(options.ignoreGlobs, options.noDefaultIgnore);
+  const artifacts = options.preloaded
+    ? (ignore ? options.preloaded.artifacts.filter((a) => !ignore(a.sourcePath)) : options.preloaded.artifacts)
+    : await loadFoundryArtifacts(options.path, { ignoreSourcePath: ignore });
 
-  const rawSources = await loadRawSources(
-    options.path,
-    artifacts.map((a) => a.sourcePath),
-  );
+  const rawSources = options.preloaded
+    ? options.preloaded.rawSources
+    : await loadRawSources(
+        options.path,
+        artifacts.map((a) => a.sourcePath),
+      );
 
   const ctx: AnalyzerContext = {
     artifacts,
