@@ -23,9 +23,17 @@ function keyOf(s: StorageLayoutSlot): string {
 function declarationKey(s: StorageLayoutSlot): string {
   // Don't include `s.contract` — when a facet declares its own state, the contract
   // field is the facet's own path, which differs across facets even when both reference
-  // the *same* conceptual variable. Same label + same type-id (incl. astId) means
-  // it's the canonical shared-storage pattern, not drift.
-  return `${s.label}::${s.type}`;
+  // the *same* conceptual variable.
+  //
+  // Key on `astId`, the identity of the underlying VariableDeclaration. A single
+  // declaration inherited into many facets keeps one stable astId across artifacts, so
+  // it collapses to one key (canonical shared-storage pattern, not flagged). Two facets
+  // that *independently* declare a variable get distinct astIds and so distinct keys,
+  // which is a real collision. solc already embeds the astId in struct type ids, so
+  // struct drift was discriminated; elementary types (address/uint/bool/bytes32) carry
+  // no astId in their type id, so without this they collapse and a genuine collision of
+  // two same-named, same-typed primitives at one slot goes undetected.
+  return `${s.label}::${s.type}::${s.astId}`;
 }
 
 export function collectSlotEntries(artifacts: FacetArtifact[]): Map<string, SlotEntry[]> {
