@@ -123,8 +123,26 @@ function extractErc7201FormulaNamespace(value: unknown): string | null {
       (n.rightExpression as AstNode | undefined)?.nodeType === "Literal" &&
       (n.rightExpression as AstNode).value === "1",
   );
-  const hasMask = someNode(value, (n) => n.nodeType === "BinaryOperation" && n.operator === "&");
-  if (!hasSubOne || !hasMask) return null;
+  const hasAnd = someNode(value, (n) => n.nodeType === "BinaryOperation" && n.operator === "&");
+  // The canonical ERC-7201 mask clears the low byte: `& ~bytes32(uint256(0xff))`. Require
+  // the `~` and the 0xff literal, not merely the presence of any `&`. A constant masked
+  // with a different value computes a *different* slot, so misreading it as ERC-7201 and
+  // assigning it the standard erc7201Slot(namespace) would report a slot it never occupies.
+  const hasNotMask = someNode(
+    value,
+    (n) => n.nodeType === "UnaryOperation" && n.operator === "~",
+  );
+  const hasLowByteLiteral = someNode(value, (n) => {
+    if (n.nodeType !== "Literal" || n.kind !== "number" || typeof n.value !== "string") {
+      return false;
+    }
+    try {
+      return BigInt(n.value) === 0xffn;
+    } catch {
+      return false;
+    }
+  });
+  if (!hasSubOne || !hasAnd || !hasNotMask || !hasLowByteLiteral) return null;
   return strings[0]!;
 }
 
