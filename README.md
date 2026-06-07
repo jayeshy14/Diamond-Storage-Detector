@@ -158,6 +158,8 @@ diamond-detect <path>                    Foundry project root or src/ folder
   --facets <glob>                        Restrict facet-shared-storage analyzers
                                          (inheritance-overlap, appstorage-fingerprint)
                                          to source paths matching this glob (repeatable)
+  --allow-missing-ast                    Downgrade the "no artifact has an AST" hard
+                                         failure to a warning and continue
 ```
 
 ## Output formats
@@ -211,7 +213,7 @@ Tighten with `--severity error` if you only want to fail CI on hard collisions.
 
 ## Troubleshooting
 
-**"warning: no AST found in any artifact"**: your build didn't include AST output. Set `ast = true` in `foundry.toml` (under `[profile.default]`) and rebuild. Without AST, the namespace, EIP-7201, and inline-assembly analyzers can't run; only storage-layout-based ones (`appstorage-fingerprint`, `inheritance-overlap`) will fire.
+**"error: no AST found in any artifact" (exit 2)**: your build didn't include AST output, so the namespace, EIP-7201, and inline-assembly analyzers can't run and only the storage-layout-based ones (`appstorage-fingerprint`, `inheritance-overlap`) would fire. Rather than pass CI green on that partial scan, the tool **fails closed** with exit 2. Set `ast = true` in `foundry.toml` (under `[profile.default]`) and rebuild. If you deliberately want a storage-layout-only scan, pass `--allow-missing-ast` to downgrade this to a warning and continue.
 
 **"Foundry out/ directory not found"**: you haven't run `forge build` yet, or you pointed `diamond-detect` at the wrong directory. Pass either the project root (the directory with `foundry.toml`) or any subdirectory of it.
 

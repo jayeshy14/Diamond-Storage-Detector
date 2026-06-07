@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import pc from "picocolors";
 import { detect } from "./detector/index.js";
+import { decideCoverageAction } from "./detector/coverage.js";
 import { defaultAnalyzers } from "./detector/analyzers/index.js";
 import { renderTerminal } from "./reporter/terminal.js";
 import { renderJson } from "./reporter/json.js";
@@ -16,6 +17,7 @@ interface CliOptions {
   ignore: string[];
   noDefaultIgnore?: boolean;
   facets: string[];
+  allowMissingAst?: boolean;
 }
 
 async function run(target: string, opts: CliOptions): Promise<void> {
@@ -29,13 +31,18 @@ async function run(target: string, opts: CliOptions): Promise<void> {
     defaultAnalyzers,
   );
 
-  const withAst = result.artifacts.filter((a) => a.ast).length;
-  if (result.artifacts.length > 0 && withAst === 0 && !opts.json) {
-    process.stderr.write(
-      pc.yellow(
-        "warning: no AST found in any artifact. Set `ast = true` in foundry.toml (or pass `--ast` to forge) and rebuild — AST-based analyzers depend on it.\n",
-      ),
-    );
+  const decision = decideCoverageAction(result.artifacts, {
+    allowMissingAst: opts.allowMissingAst,
+  });
+  if (decision.message) {
+    const colored =
+      decision.level === "error" ? pc.red(decision.message) : pc.yellow(decision.message);
+    process.stderr.write(colored + "\n");
+  }
+  if (decision.exitCode !== undefined) {
+    // Fail closed before rendering, so we never print a "no collisions" report for a
+    // scan that could not actually run the AST-based analyzers.
+    process.exit(decision.exitCode);
   }
 
   const output = opts.json
@@ -90,6 +97,10 @@ program
     "Restrict facet-shared-storage analyzers (inheritance-overlap, appstorage-fingerprint) to source paths matching this glob. Repeat for multiple.",
     (v: string, prev: string[] = []) => prev.concat(v),
     [] as string[],
+  )
+  .option(
+    "--allow-missing-ast",
+    "Downgrade the hard failure when no artifact has an AST (storage-layout-only scan) to a warning and continue",
   )
   .action(async (target: string, opts: CliOptions) => {
     try {
