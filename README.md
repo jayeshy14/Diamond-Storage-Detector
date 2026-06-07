@@ -149,7 +149,12 @@ diamond-detect --severity info .    # exit 1 on anything
 ## CLI reference
 
 ```
-diamond-detect <path>                    Foundry project root or src/ folder
+diamond-detect <path>                    Foundry project root or src/ folder (omit with --onchain)
+  --onchain <address>                    History mode: replay the deployed Diamond's
+                                         DiamondCut log and check every facet ever registered
+  --rpc <url>                            RPC endpoint for --onchain ($RPC_URL_ARB / $RPC_URL)
+  --etherscan-key <key>                  Etherscan API key for --onchain ($API_KEY_ETHERSCAN)
+  --chainid <n>                          Chain id for --onchain (default: 42161, Arbitrum One)
   --json                                 Machine-readable JSON
   --markdown                             GitHub-flavored Markdown (PR-friendly)
   --severity <info|warn|error>           Exit-code threshold (default: warn)
@@ -233,9 +238,31 @@ Tighten with `--severity error` if you only want to fail CI on hard collisions.
 
 Slither's storage layout does not model Diamond namespaced storage, which lives at hashed slots reached through assembly, so it cannot see a Diamond storage collision at all. It remains excellent for general Solidity static analysis, so run both.
 
+## History mode (on-chain)
+
+A static scan only sees the facets that compile today. A Diamond that has been live for years has had facets added and removed, and **storage persists after a facet is removed** — its slots still hold data that a newly added facet can collide with. So the real collision space is every storage region the proxy has *ever* used, not just today's source tree.
+
+History mode reconstructs that full set from the chain itself:
+
+```sh
+diamond-detect --onchain 0x06eb18FC187Ec0Bf4687e6783DC8cDcB2AD8F97B \
+  --chainid 42161 \
+  --rpc "$RPC_URL_ARB" \
+  --etherscan-key "$API_KEY_ETHERSCAN"
+```
+
+What it does:
+
+1. **Replays the `DiamondCut` event log** — an immutable record of every facet ever cut in or out — to recover every facet address ever registered, removed ones included. The log is read from Etherscan's logs endpoint (paginated server-side) rather than `eth_getLogs`, because free RPC tiers cap `eth_getLogs` to as few as 10 blocks, which makes a from-deployment scan of a 20M+ block chain impossible.
+2. **Fetches each facet's verified source** from Etherscan and **recompiles it with its exact solc version** (recovered from the verified build) so the AST and storage layout match what was actually deployed.
+3. Runs the **same five analyzers** over the union. Shared libraries keep their canonical source path, so a `LibDiamond` bundled into every facet collapses to one region and never false-positives against itself; two facets that *independently* declare the same namespace are still caught.
+
+`--rpc` defaults to `$RPC_URL_ARB` or `$RPC_URL`, `--etherscan-key` to `$API_KEY_ETHERSCAN`, and `--chainid` to `42161` (Arbitrum One). A `.env` in the working directory is loaded automatically.
+
+Limitations: facets whose source is unverified on Etherscan are skipped (and reported), and history mode reasons about the union of declared layouts — it flags drift and shared-slot reuse, but it does not replay actual storage writes, so it cannot prove a removed facet's leftover *data* currently overlaps a live region, only that their layouts would collide if co-resident.
+
 ## Roadmap
 
-- **Onchain mode**: point at a deployed Diamond address; resolve facets through the [Diamond Loupe](https://eips.ethereum.org/EIPS/eip-2535#diamond-loupe), pull source from Etherscan, and run the same checks against what's actually live.
 - **Facet auto-detection**: infer the facet set by walking deployment scripts or naming conventions, so `--facets` becomes optional.
 - **Slither plugin**: surface findings inside an existing Slither pipeline.
 - **VS Code extension**: inline diagnostics on save.
